@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Sunset of the World</title>
+  <link rel="stylesheet" href="css/menu.css" />
+</head>
+<body>
+  <!-- ============ ГЛАВНОЕ МЕНЮ ============ -->
+  <main id="menu-screen" class="screen is-active">
+    <img class="menu-bg" src="assets/img/background.svg" alt="" aria-hidden="true" />
+    <div class="menu-scrim" aria-hidden="true"></div>
+
+    <div class="menu-content">
+      <img class="menu-logo" src="assets/img/logo.svg" alt="Sunset of the World" />
+
+      <nav class="menu-buttons" aria-label="Главное меню">
+        <button class="menu-btn" data-action="new">Новая игра</button>
+        <button class="menu-btn" data-action="continue" disabled>Продолжить</button>
+        <button class="menu-btn" data-action="create-lobby">Создать лобби</button>
+        <button class="menu-btn" data-action="join-lobby">Ввести код</button>
+        <button class="menu-btn" data-action="settings">Настройки</button>
+        <button class="menu-btn" data-action="journal">Дневник</button>
+        <button class="menu-btn" data-action="exit">Выход</button>
+      </nav>
+    </div>
+
+    <button class="mods-btn" data-action="mods" title="Моды">
+      <span class="mods-gear">⚙</span> Моды
+    </button>
+
+    <p class="build-tag">prototype build · web</p>
+  </main>
+
+  <!-- ============ МОДАЛЬНЫЕ ОКНА ============ -->
+  <div id="modal-root" class="modal-root" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button class="modal-x" data-close aria-label="Закрыть">✕</button>
+      <h2 class="modal-title" id="modal-title"></h2>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- ============ ИНТРО «НЕКОГО» ============ -->
+  <div id="neko-intro" class="neko-intro" hidden>
+    <p class="neko-line" id="neko-line"></p>
+    <button class="neko-skip" id="neko-skip">пропустить ▸</button>
+  </div>
+
+  <script src="js/menu.js"></script>
+</body>
+</html>
