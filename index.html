@@ -8,13 +8,10 @@
 </head>
 <body>
   <!-- ============ ГЛАВНОЕ МЕНЮ ============ -->
+  <!-- Фон — оригинальный арт меню из скриншота (логотип сохранён).
+       Старые кнопки стёрты, весь список рисуется поверх панели вживую. -->
   <main id="menu-screen" class="screen is-active">
-    <img class="menu-bg" src="assets/img/background.svg" alt="" aria-hidden="true" />
-    <div class="menu-scrim" aria-hidden="true"></div>
-
-    <div class="menu-content">
-      <img class="menu-logo" src="assets/img/logo.svg" alt="Sunset of the World" />
-
+    <div id="menu-stage">
       <nav class="menu-buttons" aria-label="Главное меню">
         <button class="menu-btn" data-action="new">Новая игра</button>
         <button class="menu-btn" data-action="continue" disabled>Продолжить</button>
@@ -24,13 +21,13 @@
         <button class="menu-btn" data-action="journal">Дневник</button>
         <button class="menu-btn" data-action="exit">Выход</button>
       </nav>
+
+      <button class="mods-btn" data-action="mods" title="Моды">
+        <span class="mods-gear">⚙</span> Моды
+      </button>
+
+      <p class="build-tag">prototype build · web</p>
     </div>
-
-    <button class="mods-btn" data-action="mods" title="Моды">
-      <span class="mods-gear">⚙</span> Моды
-    </button>
-
-    <p class="build-tag">prototype build · web</p>
   </main>
 
   <!-- ============ МОДАЛЬНЫЕ ОКНА ============ -->
