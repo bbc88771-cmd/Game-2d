@@ -279,10 +279,71 @@ html, body {
   position: fixed; inset: 0; z-index: 80;
   background: #000;
   display: grid; place-items: center;
-  padding: 8vw;
-  cursor: pointer;
+  padding: 6vw;
+  cursor: default;
 }
 .neko-intro[hidden] { display: none; }
+
+/* слой «бегущего кода» на заднем плане */
+.neko-code {
+  position: absolute; inset: 0; margin: 0;
+  font-family: "DejaVu Sans Mono", ui-monospace, monospace;
+  font-size: clamp(11px, 1.7vh, 16px);
+  line-height: 1.5;
+  color: #ff2e2e;
+  text-shadow: 0 0 8px rgba(255,30,30,0.7);
+  white-space: pre; overflow: hidden;
+  padding: 4vh 3vw;
+  opacity: 0;
+  pointer-events: none;
+}
+.neko-code.run { animation: neko-code-run 2s ease forwards; }
+@keyframes neko-code-run {
+  0% { opacity: 0; transform: translateY(26px); }
+  16% { opacity: 0.85; }
+  84% { opacity: 0.85; }
+  100% { opacity: 0; transform: translateY(-34px); }
+}
+
+/* центральный диалог поверх кода */
+.neko-dialog {
+  position: relative; z-index: 1;
+  width: min(860px, 92vw);
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(18px, 3.4vh, 40px);
+  text-align: center;
+}
+.neko-input-row { display: flex; gap: 10px; align-items: center; }
+.neko-input-row[hidden] { display: none; }
+#neko-input {
+  background: #0a0000;
+  border: 1px solid rgba(255,46,46,0.5);
+  color: #ff7a7a;
+  font-family: var(--serif);
+  font-size: clamp(20px, 3vh, 32px);
+  text-align: center;
+  padding: 0.4em 0.8em;
+  border-radius: 8px;
+  min-width: min(60vw, 420px);
+  outline: none;
+  box-shadow: inset 0 0 18px rgba(255,30,30,0.22);
+}
+#neko-input:focus { border-color: #ff2e2e; box-shadow: inset 0 0 24px rgba(255,30,30,0.4); }
+#neko-send {
+  background: none; border: 1px solid rgba(255,46,46,0.5); color: #ff4b4b;
+  font-size: clamp(20px, 3vh, 30px); border-radius: 8px; cursor: pointer; padding: 0.15em 0.55em;
+  transition: border-color .15s, color .15s;
+}
+#neko-send:hover { border-color: #ff2e2e; color: #ff8a8a; }
+.neko-confirm { display: flex; gap: 18px; }
+.neko-confirm[hidden] { display: none; }
+.neko-btn {
+  background: none; border: 1px solid rgba(255,46,46,0.5); color: #ff5b5b;
+  font-family: var(--serif); font-size: clamp(18px, 2.6vh, 26px);
+  padding: 0.4em 1.5em; border-radius: 8px; cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.neko-btn:hover { background: rgba(255,30,30,0.12); border-color: #ff2e2e; color: #ff8a8a; }
 .neko-line {
   max-width: 880px;
   text-align: center;

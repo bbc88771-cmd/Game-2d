@@ -69,7 +69,18 @@
   // ===========================================================
   //  Новая игра → сложность → герой → интро «Некого»
   // ===========================================================
+  let playerName = null;
+
+  // Новая игра начинается с появления «Некого» (диалог об имени),
+  // затем — выбор сложности и героя.
   function newGameFlow() {
+    nekoNameIntro((name) => {
+      playerName = name;
+      chooseDifficulty();
+    });
+  }
+
+  function chooseDifficulty() {
     const list = DIFFICULTIES.map(([id, name, sub]) =>
       `<div class="opt${settings.difficulty === id ? " is-selected" : ""}" data-diff="${id}">
          <span>${name}</span><span class="opt-sub">${sub}</span>
@@ -97,60 +108,158 @@
     wrap.querySelectorAll("[data-hero]").forEach((node) =>
       node.addEventListener("click", () => {
         closeModal();
-        nekoIntro(node.dataset.hero);
+        startWorldStub(node.dataset.hero);
       }));
     openModal("Новая игра — герой", wrap);
   }
 
-  // ---- интро «Некого»: чёрный экран, красные светящиеся буквы ----
-  const NEKO_LINES = [
-    "Ты тоже это видел?..",
-    "Хотя… ты же и есть это.",
-    "КТО ТЫ?",
-    "Если ты освободишь меня… я стану тобой.",
-    "Ты уверен, что хочешь начать?",
-  ];
-  function nekoIntro(heroId) {
-    const intro = $("#neko-intro");
-    const lineEl = $("#neko-line");
-    const skip = $("#neko-skip");
-    intro.hidden = false;
-    let li = 0, ci = 0, timer = null;
-    const finish = () => {
-      clearTimeout(timer);
-      intro.hidden = true;
-      startWorldStub(heroId);
-    };
-    const typeNext = () => {
-      if (li >= NEKO_LINES.length) { timer = setTimeout(finish, 700); return; }
-      const text = NEKO_LINES[li];
-      if (ci <= text.length) {
-        lineEl.innerHTML = text.slice(0, ci) + '<span class="neko-caret">▌</span>';
-        ci++;
-        timer = setTimeout(typeNext, 55);
-      } else {
-        ci = 0; li++;
-        timer = setTimeout(typeNext, 1100); // пауза между фразами
+  // ===========================================================
+  //  Интро «Некого»: чёрный экран → бегущий красный код →
+  //  «Кто ты?» → распознавание имени → подтверждение → «Интересно»
+  // ===========================================================
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let skipNeko = false;
+
+  function makeCode(lines) {
+    const ch = "01xX#@/\\|<>[]{}()=+*-ABCDEF0123456789░▒▓§∆ΣλØ";
+    const rnd = (n) => Array.from({ length: n }, () => ch[Math.floor(Math.random() * ch.length)]).join("");
+    const seg = () => ["0x" + rnd(4), "INIT", "soul.bind(" + rnd(3) + ")", "who_are_you",
+      "0b" + rnd(6), "trace[" + rnd(2) + "]", "rift.open()", "mem.scan", "::" + rnd(5),
+      "echo(" + rnd(3) + ")", "WAKE", "bind(" + rnd(2) + ")"][Math.floor(Math.random() * 12)];
+    const out = [];
+    for (let i = 0; i < lines; i++) {
+      let line = "";
+      while (line.length < 78) line += seg() + "  ";
+      out.push(line);
+    }
+    return out.join("\n");
+  }
+
+  function codeRain(dur) {
+    return new Promise((resolve) => {
+      const code = $("#neko-code");
+      code.textContent = makeCode(30);
+      code.classList.remove("run"); void code.offsetWidth; code.classList.add("run");
+      const start = Date.now();
+      const tick = () => {
+        if (skipNeko || Date.now() - start >= dur) {
+          code.classList.remove("run"); code.textContent = ""; resolve();
+        } else setTimeout(tick, 80);
+      };
+      setTimeout(tick, 80);
+    });
+  }
+
+  function nekoType(text, hold = 850) {
+    return new Promise((resolve) => {
+      const el = $("#neko-line");
+      let i = 0;
+      const step = () => {
+        el.innerHTML = text.slice(0, i) + '<span class="neko-caret">▌</span>';
+        if (i++ < text.length) setTimeout(step, skipNeko ? 4 : 45);
+        else setTimeout(() => { el.textContent = text; resolve(); }, skipNeko ? 90 : hold);
+      };
+      step();
+    });
+  }
+
+  function askLine() {
+    return new Promise((resolve) => {
+      const row = $("#neko-input-row"), input = $("#neko-input");
+      input.value = ""; row.hidden = false; input.focus();
+      const submit = (e) => {
+        e.preventDefault();
+        const v = input.value;
+        row.hidden = true; row.removeEventListener("submit", submit);
+        resolve(v);
+      };
+      row.addEventListener("submit", submit);
+    });
+  }
+
+  function askConfirm() {
+    return new Promise((resolve) => {
+      const box = $("#neko-confirm");
+      const yes = box.querySelector("[data-yes]"), no = box.querySelector("[data-no]");
+      box.hidden = false;
+      const done = (val) => {
+        box.hidden = true;
+        yes.removeEventListener("click", oy); no.removeEventListener("click", on);
+        resolve(val);
+      };
+      const oy = () => done(true), on = () => done(false);
+      yes.addEventListener("click", oy); no.addEventListener("click", on);
+    });
+  }
+
+  // Слова, которые точно не имя (для распознавания имени в фразе)
+  const NEKO_STOP = new Set(("я ты он она оно мы вы меня тебя себя нас вас зовут звать имя это как кто " +
+    "что чё че а и но или о ну да нет не привет здравствуй здравствуйте эй мой моё мое моя мне тебе " +
+    "называй можешь блин нихуя нифига себе вот так тут здесь is my name the").split(/\s+/));
+  const SASS = ["Я спросил: КТО ТЫ.", "Слишком много текста. Просто напиши своё имя.", "Имя."];
+
+  function parseName(raw) {
+    const s = (raw || "").trim();
+    if (!s) return { ok: false, msg: "Имя." };
+    const words = s.split(/[\s,.;:!?…"'«»()\[\]]+/).filter(Boolean);
+    const looksName = (w) => /[A-Za-zА-Яа-яЁё]/.test(w) && /^[\wА-Яа-яЁё-]{1,24}$/.test(w);
+    const cand = words.filter((w) => looksName(w) && !NEKO_STOP.has(w.toLowerCase()));
+    if (s.length > 40 || words.length > 4) return { ok: false, sass: true };
+    if (cand.length === 0) return { ok: false, sass: true };
+    let name = cand.find((w) => /^[A-ZА-ЯЁ]/.test(w)) || cand[0];
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    return { ok: true, name };
+  }
+
+  async function askName() {
+    let sassIdx = 0;
+    while (true) {
+      const raw = await askLine();
+      const res = parseName(raw);
+      if (!res.ok) {
+        await nekoType(res.sass ? SASS[sassIdx++ % SASS.length] : res.msg, 650);
+        continue;
       }
-    };
-    const onSkip = () => { skip.removeEventListener("click", onSkip); intro.removeEventListener("click", onSkip); finish(); };
+      await nekoType(`${res.name}? Так тебя зовут?`, 400);
+      if (await askConfirm()) return res.name;
+      await nekoType("Тогда кто?", 550);
+    }
+  }
+
+  async function nekoNameIntro(onDone) {
+    const intro = $("#neko-intro"), skip = $("#neko-skip");
+    skipNeko = false;
+    intro.hidden = false;
+    const onSkip = () => { skipNeko = true; };
     skip.addEventListener("click", onSkip);
-    intro.addEventListener("click", onSkip);
-    timer = setTimeout(typeNext, 600);
+
+    await codeRain(2000);
+    await nekoType("Кто ты?", 500);
+    const name = await askName();
+    await nekoType("…", 250);
+    await codeRain(1500);
+    await nekoType(`«${name}». Интересно.`, 1000);
+    await wait(skipNeko ? 150 : 750);
+
+    skip.removeEventListener("click", onSkip);
+    $("#neko-line").textContent = "";
+    intro.hidden = true;
+    onDone(name);
   }
 
   function startWorldStub(heroId) {
     // запись «черновика» сейва, чтобы заработала кнопка Продолжить
     const heroName = (HEROES.find((h) => h[0] === heroId) || [, "—"])[1];
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      hero: heroId, difficulty: settings.difficulty, createdAt: Date.now(),
+      hero: heroId, name: playerName, difficulty: settings.difficulty, createdAt: Date.now(),
     }));
     refreshContinue();
+    closeModal();
     openModal("Стартовый остров", `
+      <p>${playerName ? `«${playerName}», т` : "Т"}ы очнулся в разорванном мире после катаклизма.</p>
       <p>Герой: <b>${heroName}</b> · Сложность: <b>${diffName(settings.difficulty)}</b></p>
       <p>Здесь начинается мир «Sunset of the World». Геймплейный прототип
       (движение, сбор ресурсов, стройка, бой) — следующий шаг разработки.</p>
-      <p class="hint">Меню, выбор героя/сложности и интро «Некого» уже работают.</p>
       <div class="row end"><button class="btn primary" data-close>В меню</button></div>`);
   }
   const diffName = (id) => (DIFFICULTIES.find((d) => d[0] === id) || [, "—"])[1];
@@ -341,6 +450,7 @@
       const save = localStorage.getItem(SAVE_KEY);
       if (!save) return;
       const d = JSON.parse(save);
+      playerName = d.name || null;
       startWorldStub(d.hero);
     },
     "create-lobby": createLobby,

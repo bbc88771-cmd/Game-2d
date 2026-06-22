@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Sunset of the World</title>
-  <link rel="stylesheet" href="css/menu.css?v=4" />
+  <link rel="stylesheet" href="css/menu.css?v=5" />
 </head>
 <body>
   <!-- ============ ГЛАВНОЕ МЕНЮ ============ -->
@@ -42,10 +42,22 @@
 
   <!-- ============ ИНТРО «НЕКОГО» ============ -->
   <div id="neko-intro" class="neko-intro" hidden>
-    <p class="neko-line" id="neko-line"></p>
-    <button class="neko-skip" id="neko-skip">пропустить ▸</button>
+    <pre class="neko-code" id="neko-code" aria-hidden="true"></pre>
+    <div class="neko-dialog">
+      <p class="neko-line" id="neko-line"></p>
+      <form class="neko-input-row" id="neko-input-row" hidden>
+        <input id="neko-input" type="text" maxlength="24" placeholder="напиши своё имя…"
+               autocomplete="off" spellcheck="false" />
+        <button type="submit" id="neko-send" aria-label="Ответить">▸</button>
+      </form>
+      <div class="neko-confirm" id="neko-confirm" hidden>
+        <button class="neko-btn" data-yes>Да</button>
+        <button class="neko-btn" data-no>Нет</button>
+      </div>
+    </div>
+    <button class="neko-skip" id="neko-skip">ускорить ▸</button>
   </div>
 
-  <script src="js/menu.js?v=3"></script>
+  <script src="js/menu.js?v=5"></script>
 </body>
 </html>
