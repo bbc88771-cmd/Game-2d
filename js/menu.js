@@ -412,6 +412,7 @@
   function nekoType(text, hold = 850) {
     return new Promise((resolve) => {
       const el = $("#neko-line");
+      clearPlayerEcho();           // когда «Некий» заговорил — убираем зелёное эхо игрока
       let i = 0;
       const step = () => {
         el.innerHTML = text.slice(0, i) + '<span class="neko-caret">▌</span>';
@@ -446,7 +447,6 @@
       const done = (val) => {
         box.hidden = true;
         yes.removeEventListener("click", oy); no.removeEventListener("click", on);
-        playerEcho(val ? "Да" : "Нет");
         resolve(val);
       };
       const oy = () => done(true), on = () => done(false);
