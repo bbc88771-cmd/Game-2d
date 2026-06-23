@@ -473,9 +473,54 @@ html, body {
 .cut-caption.show { opacity: 1; transform: none; }
 .cutscene .neko-skip { color: rgba(243,231,207,0.6); }
 .cutscene .neko-skip:hover { color: #f3e7cf; }
-.cut-frame.kb { animation: ken-burns 3.4s ease-out forwards; }
-@keyframes ken-burns { from { transform: scale(1.0); } to { transform: scale(1.1); } }
+.cut-frame { transform-origin: center; }
+.cut-frame.kb { animation: ken-burns 4s ease-out forwards; }
+.cut-frame.kb2 { animation: ken-burns2 4s ease-out forwards; }
+@keyframes ken-burns { from { transform: scale(1.0) translate(0,0); } to { transform: scale(1.13) translate(-2.5%,-1.5%); } }
+@keyframes ken-burns2 { from { transform: scale(1.12) translate(2%,1.5%); } to { transform: scale(1.0) translate(0,0); } }
 .cutscene.fade-out { transition: opacity 0.9s ease; opacity: 0; }
+
+/* туман */
+.cut-fog {
+  position: absolute; inset: -12%; z-index: 1; pointer-events: none; opacity: 0;
+  transition: opacity 1.2s ease;
+  background:
+    radial-gradient(55% 45% at 30% 62%, rgba(150,135,110,0.18), transparent 70%),
+    radial-gradient(50% 40% at 75% 42%, rgba(110,98,84,0.14), transparent 70%);
+  animation: fog-drift 20s ease-in-out infinite alternate;
+}
+.cutscene:not([hidden]) .cut-fog { opacity: 1; }
+@keyframes fog-drift { from { transform: translate(-4%,0) scale(1.04); } to { transform: translate(4%,2%) scale(1.12); } }
+
+/* угольки */
+.cut-embers { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.ember {
+  position: absolute; bottom: -12px; border-radius: 50%;
+  background: #ffcf7a; box-shadow: 0 0 8px 1px #ff9a32; opacity: 0;
+  animation-name: ember-rise; animation-timing-function: linear; animation-iteration-count: infinite;
+}
+@keyframes ember-rise {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  12% { opacity: 0.85; }
+  100% { transform: translateY(-78vh) scale(0.3); opacity: 0; }
+}
+
+/* вспышка на смене кадра */
+.cut-flash { position: absolute; inset: 0; z-index: 2; pointer-events: none; background: #fff; opacity: 0; }
+.cut-flash.go { animation: cut-flash 0.7s ease-out; }
+@keyframes cut-flash { 0% { opacity: 0; } 12% { opacity: 0.4; } 100% { opacity: 0; } }
+
+/* клавиши способностей + секретная способность */
+.skill-key {
+  flex: none; width: 26px; height: 26px; display: grid; place-items: center;
+  border-radius: 6px; background: #2a2018; border: 1px solid rgba(243,231,207,0.3);
+  color: var(--gold-bright); font-family: "DejaVu Sans Mono", monospace; font-size: 13px; font-weight: bold;
+}
+.skill-txt { display: flex; flex-direction: column; gap: 2px; }
+.skill-list li.secret.locked { opacity: 0.72; border-style: dashed; }
+.skill-list li.secret.on { border-color: var(--ember); box-shadow: inset 0 0 0 1px rgba(255,138,43,0.3); }
+.skill-list li.secret .skill-key { background: #3a2a12; color: var(--ember); }
+.ring-note { font-size: 12px; color: #9d9488; margin: 10px 0 0; line-height: 1.45; font-style: italic; }
 
 /* ===========================================================
    Полноэкранный выбор персонажа
@@ -510,7 +555,7 @@ html, body {
 }
 .skill-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .skill-list li {
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: row; align-items: flex-start; gap: 10px;
   background: rgba(255,255,255,0.03); border: 1px solid rgba(243,231,207,0.12);
   border-radius: 8px; padding: 8px 10px;
 }

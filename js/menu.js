@@ -49,6 +49,20 @@
   neko.visits = (neko.visits || 0) + 1;
   nekoSave();
 
+  // ---------- прогресс сложностей (для секретной 5-й способности) ----------
+  const CLEARED_KEY = "sotw_cleared";
+  const REAL_DIFFS = ["easy", "normal", "hard", "nightmare"]; // Творческий не считается
+  function getCleared() {
+    try { return JSON.parse(localStorage.getItem(CLEARED_KEY) || "[]"); } catch { return []; }
+  }
+  function markCleared(diff) {
+    const c = getCleared();
+    if (REAL_DIFFS.includes(diff) && !c.includes(diff)) {
+      c.push(diff); localStorage.setItem(CLEARED_KEY, JSON.stringify(c));
+    }
+  }
+  const secretUnlocked = () => REAL_DIFFS.every((d) => getCleared().includes(d));
+
   const DIFFICULTIES = [
     ["creative", "Творческий", "Без угроз — стройка и исследование"],
     ["easy", "Лёгкий", "Мягкие враги, без доп-боссов (~30 ч)"],
@@ -237,6 +251,15 @@
         "Чип с тех пор слегка скрипит. Уолтер говорит, что это «фирменный звук».",
     },
   };
+  // 4 способности привязаны к клавишам; 5-я — секретная
+  const SKILL_KEYS = ["Q", "E", "R", "F"];
+  const HERO_SECRET = {
+    tessi: ["Глаза мира", "Поле обнаружения опасности: подсвечивает врагов, боссов и скрытое — руду, родники, деревни — даже сквозь стены. Радиус растёт по кольцу навыков."],
+    amira: ["Несокрушимый бастион", "Становится живой стеной: поглощает урон всей команды и отражает часть атак."],
+    swordsman: ["Танец последней стали", "Время замедляется; каждый удар критический и мгновенно добивает раненых."],
+    kaijo: ["Сто теней", "Призывает армию теней-двойников, что бьют вместе с ним."],
+    walter: ["Рой Чипа", "Разворачивает рой дронов и турелей, воюющих самостоятельно."],
+  };
   let heroSel = "tessi";
 
   function chooseHero() { openHeroSelect(); }
@@ -268,10 +291,23 @@
     el.innerHTML = `
       <section class="hero-col left">
         <h2>Характеристики</h2>
-        <h4>Навыки</h4>
+        <h4>Навыки <span style="text-transform:none;letter-spacing:0;color:#9d9488">(на клавишах)</span></h4>
         <ul class="skill-list">
-          ${det.skills.map(([n, d]) => `<li><b>${n}</b><span>${d}</span></li>`).join("")}
+          ${det.skills.map(([n, d], i) => `<li>
+            <span class="skill-key">${SKILL_KEYS[i] || ""}</span>
+            <div class="skill-txt"><b>${n}</b><span>${d}</span></div></li>`).join("")}
+          ${(() => {
+            const sec = HERO_SECRET[id]; const on = secretUnlocked();
+            const done = getCleared().filter((x) => REAL_DIFFS.includes(x)).length;
+            return `<li class="secret ${on ? "on" : "locked"}">
+              <span class="skill-key">5</span>
+              <div class="skill-txt">${on
+                ? `<b>${sec[0]}</b><span>${sec[1]}</span>`
+                : `<b>Секретная способность 🔒</b><span>Откроется после прохождения игры на всех сложностях (лёгкая, обычная, сложная, хард). Пройдено: ${done}/4.</span>`}</div></li>`;
+          })()}
         </ul>
+        <p class="ring-note">Способности усиливаются через «Кольцо навыков»: например, поле
+          обнаружения опасности расширяет радиус и начинает подсвечивать руду и деревни.</p>
         <h4 class="pros-h">Плюсы</h4>
         <ul class="trait-list pros">${det.pros.map((p) => `<li>${p}</li>`).join("")}</ul>
         <h4 class="cons-h">Минусы</h4>
@@ -589,28 +625,46 @@
     o.start(t); o.stop(t + 1.9);
   }
 
-  // Катсцена: слегка анимированные кадры (Ken Burns) + текст + звук;
+  // живые угольки в катсцене
+  function spawnEmbers(host, n = 26) {
+    host.innerHTML = "";
+    for (let i = 0; i < n; i++) {
+      const e = document.createElement("span");
+      e.className = "ember";
+      const s = 2 + Math.random() * 4;
+      e.style.left = Math.random() * 100 + "%";
+      e.style.width = e.style.height = s.toFixed(1) + "px";
+      e.style.animationDuration = (3 + Math.random() * 4).toFixed(1) + "s";
+      e.style.animationDelay = (-Math.random() * 6).toFixed(1) + "s";
+      host.appendChild(e);
+    }
+  }
+
+  // Катсцена: анимированные кадры (зум/пан + угольки/туман/вспышки) + текст + звук;
   // в конце экран затухает и открывается полноэкранный выбор персонажа.
   async function cutscene() {
-    const cs = $("#cutscene"), frame = $("#cut-frame"), cap = $("#cut-caption"), skip = $("#cut-skip");
+    const cs = $("#cutscene"), frame = $("#cut-frame"), cap = $("#cut-caption"),
+      skip = $("#cut-skip"), flash = $("#cut-flash"), embers = $("#cut-embers");
     let skipped = false;
     const onS = () => { skipped = true; };
     skip.addEventListener("click", onS);
     cs.hidden = false; cs.classList.remove("fade-out");
+    spawnEmbers(embers);
     const audio = startAmbient();
     const frames = [
-      ["assets/img/background.jpg", "Мир, который ты знал, уже закончился.", 196],
-      ["assets/img/loc_dead.svg", "Земля треснула и высохла. Вода ушла.", 165],
-      ["assets/img/loc_magic.svg", "Из трещин пришли души — и заняли всё живое.", 220],
-      [null, "Осталось только это.\nИ ты.", 110],
+      ["assets/img/background.jpg", "Мир, который ты знал, уже закончился.", 196, "kb"],
+      ["assets/img/loc_dead.svg", "Земля треснула и высохла. Вода ушла.", 165, "kb2"],
+      ["assets/img/loc_magic.svg", "Из трещин пришли души — и заняли всё живое.", 220, "kb"],
+      [null, "Осталось только это.\nИ ты.", 110, "kb2"],
     ];
-    for (const [img, text, freq] of frames) {
+    for (const [img, text, freq, kb] of frames) {
       if (skipped) break;
       frame.style.opacity = "0";
       await wait(skipped ? 0 : 320);                    // плавный переход между кадрами
       frame.style.backgroundImage = img ? `url("${img}")` : "none";
-      frame.classList.remove("kb"); void frame.offsetWidth; frame.classList.add("kb"); // Ken Burns
+      frame.classList.remove("kb", "kb2"); void frame.offsetWidth; frame.classList.add(kb); // зум/пан
       frame.style.opacity = img ? "1" : "0";
+      flash.classList.remove("go"); void flash.offsetWidth; flash.classList.add("go"); // вспышка на смене кадра
       cap.textContent = text;
       cap.classList.remove("show"); void cap.offsetWidth; cap.classList.add("show");
       bell(audio, freq);
@@ -620,6 +674,7 @@
     cs.classList.add("fade-out");                       // затухание всего экрана
     await wait(900);
     stopAmbient(audio);
+    embers.innerHTML = "";
     skip.removeEventListener("click", onS);
     cs.hidden = true; cs.classList.remove("fade-out");
   }
@@ -657,12 +712,18 @@
       hero: heroId, name: playerName, difficulty: settings.difficulty, createdAt: Date.now(),
     }));
     refreshContinue();
+    markCleared(settings.difficulty);   // заглушка «прохождения» — копит прогресс для 5-й способности
     closeModal();
+    const done = getCleared().filter((x) => REAL_DIFFS.includes(x)).length;
+    const unlockNote = secretUnlocked()
+      ? "<p class=\"hint\">Все сложности пройдены — секретная 5-я способность открыта!</p>"
+      : `<p class="hint">Прогресс секретной способности: пройдено ${done}/4 сложностей.</p>`;
     openModal("Стартовый остров", `
       <p>${playerName ? `«${playerName}», т` : "Т"}ы очнулся в разорванном мире после катаклизма.</p>
       <p>Герой: <b>${heroName}</b> · Сложность: <b>${diffName(settings.difficulty)}</b></p>
       <p>Здесь начинается мир «Sunset of the World». Геймплейный прототип
       (движение, сбор ресурсов, стройка, бой) — следующий шаг разработки.</p>
+      ${unlockNote}
       <div class="row end"><button class="btn primary" data-close>В меню</button></div>`);
   }
   const diffName = (id) => (DIFFICULTIES.find((d) => d[0] === id) || [, "—"])[1];
