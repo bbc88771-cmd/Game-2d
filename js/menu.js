@@ -29,6 +29,7 @@
   const defaultNeko = {
     knownName: null, metAt: 0, lastSeen: 0, visits: 0,
     launchedGame: false, storyTold: false, lastExit: null, history: [],
+    trust: 0, dark: 0, diary: [],
   };
   function nekoLoad() {
     try { return { ...defaultNeko, ...JSON.parse(localStorage.getItem(NEKO_KEY) || "{}") }; }
@@ -413,10 +414,12 @@
     return new Promise((resolve) => {
       const el = $("#neko-line");
       clearPlayerEcho();           // когда «Некий» заговорил — убираем зелёное эхо игрока
+      nekoLineStyle();             // цвет/свечение по шкале тьмы
+      const slow = (neko.dark || 0) >= 5 ? 12 : 0;   // на высокой тьме печатает медленнее
       let i = 0;
       const step = () => {
         el.innerHTML = text.slice(0, i) + '<span class="neko-caret">▌</span>';
-        if (i++ < text.length) setTimeout(step, skipNeko ? 4 : 45);
+        if (i < text.length) { if (i % 2 === 0) nekoTick(); i++; setTimeout(step, skipNeko ? 4 : 45 + slow); }
         else setTimeout(() => { el.textContent = text; resolve(); }, skipNeko ? 90 : hold);
       };
       step();
@@ -428,13 +431,30 @@
       const row = $("#neko-input-row"), input = $("#neko-input");
       clearPlayerEcho();
       input.value = ""; input.placeholder = placeholder; row.hidden = false; input.focus();
+      const promptText = $("#neko-line").textContent;   // вопрос «Некого» — вернём после реплики молчания
+      let beat = 0, timer = null;
+      const delays = [12000, 15000, 20000, 25000];
+      const schedule = () => { timer = setTimeout(onIdle, delays[Math.min(beat, 3)]); };
+      const onIdle = async () => {
+        if (row.hidden) return;
+        const lines = SILENCE[Math.min(beat, SILENCE.length - 1)];
+        await nekoType(pick(lines).replace("{n}", neko.knownName || "ты"), 600);
+        if (!row.hidden) { $("#neko-line").textContent = promptText; input.focus(); }
+        beat++; if (!row.hidden) schedule();
+      };
+      schedule();
+      const reset = () => { clearTimeout(timer); beat = 0; schedule(); };
       const submit = (e) => {
         e.preventDefault();
+        clearTimeout(timer);
         const v = input.value;
-        row.hidden = true; row.removeEventListener("submit", submit);
+        row.hidden = true;
+        row.removeEventListener("submit", submit); input.removeEventListener("input", reset);
+        nekoAdjust(v);              // двигаем шкалы доверия/тьмы
         playerEcho(v);
         resolve(v);
       };
+      input.addEventListener("input", reset);
       row.addEventListener("submit", submit);
     });
   }
@@ -473,6 +493,151 @@
     if (!text) return null;
     if (SWEAR_RE.test(String(text).toLowerCase())) return SWEAR_LINES[swearIdx++ % SWEAR_LINES.length];
     return null;
+  }
+
+  // ===========================================================
+  //  «Некий» — расширенное поведение (по design/neko-dialogue.md)
+  // ===========================================================
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+  // --- шкалы доверия/тьмы ---
+  function nekoAdjust(text) {
+    const s = (text || "").toLowerCase();
+    if (!s.trim()) return;
+    if (SWEAR_RE.test(s)) { neko.trust -= 1; neko.dark += 1; }
+    else if (/(спасиб|благодар|ты помог|пожалуйст|ты красив|мне нрав|ты умн|до свидан|спокойной ночи|\bпока\b)/.test(s)) neko.trust += 1;
+    if (/(заткнись|отстань|не трогай меня)/.test(s)) neko.trust -= 1;
+    if (/(всё бессмысленно|мне всё равно|мне все равно|хочу умереть|убей меня)/.test(s)) neko.dark += 2;
+    if (/(убью тебя|сдохни|ненавиж)/.test(s)) { neko.dark += 1; neko.trust -= 1; }
+    neko.trust = Math.max(-9, Math.min(9, neko.trust));
+    neko.dark = Math.max(0, Math.min(12, neko.dark));
+    nekoSave();
+  }
+
+  // --- распознавание повторов реплик игрока ---
+  const normMsg = (t) => (t || "").toLowerCase().replace(/[\s,.;:!?…"'«»()\[\]-]+/g, " ").trim();
+  function playerSaidBefore(text) {
+    const n = normMsg(text); if (n.length < 4) return null;
+    for (const h of neko.history) {
+      if (h.role !== "player") continue;
+      const m = normMsg(h.text);
+      if (m && (m === n || (Math.min(m.length, n.length) > 6 && (m.includes(n) || n.includes(m))))) {
+        const d = new Date(h.t || Date.now());
+        return `в ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      }
+    }
+    return null;
+  }
+  const REPEAT_LINES = [
+    "Ты это уже говорил. Слово в слово.",
+    "Это уже было. Ты помнишь?",
+    "Снова. Ты ищешь другой ответ? Я могу дать другой. Но это ничего не изменит.",
+    "Ты повторяешься. Я не жалуюсь. Просто… замечаю.",
+  ];
+
+  // единый ответчик на свободную реплику: мат → повтор → обычный ответ
+  function respondTo(text) {
+    const sw = nekoSwear(text);
+    if (sw) return sw;
+    const when = playerSaidBefore(text);
+    if (when) return pick([`Ты это уже говорил. ${when} — то же самое.`, ...REPEAT_LINES]);
+    return nekoReply(text);
+  }
+
+  // --- приветствие/прощание по шкале доверия ---
+  const GREET = {
+    cold: ["{n}. Ты вернулся. Ладно.", "А. {n}. Снова ты.", "Значит, снова. Хорошо.", "{n}. У меня нет причин быть рад. Но я здесь."],
+    neutral: ["{n}. Ты вернулся. Хорошо.", "Снова ты. Это меня устраивает.", "{n}. Я ждал. Не долго, но ждал.", "Ты здесь. Начнём там, где остановились?"],
+    warm: ["{n}. Ты пришёл. Я рад. Не делай из этого выводов.", "Ты снова здесь. Это… хорошо. Мне правда так кажется.", "{n}. Я думал о тебе. Немного.", "Ты вернулся. Ты всегда возвращаешься. Это что-то значит."],
+  };
+  const greetByTrust = (n) => (pick(neko.trust < 0 ? GREET.cold : neko.trust >= 2 ? GREET.warm : GREET.neutral)).replace("{n}", n);
+
+  // --- глитч имени ---
+  const GLITCH_NAMES = ["Анна", "Матвей", "Лиза", "Кто-то другой", "—", "Первый", "Остальные", "Ты"];
+  const GLITCH_CORR = ["…нет. {n}. Прости.", "…нет. {n}. Я знаю, кто ты.", "…нет. {n}. Иногда они перемешиваются.", "…нет. Ты — {n}. Остальных здесь нет."];
+
+  // --- молчание (эскалация) ---
+  const SILENCE = [
+    ["Я подожду. Я умею ждать.", "Не торопись. Время здесь не то же, что у тебя.", "Ты думаешь. Хорошо.", "Я слышу, что ты молчишь."],
+    ["Всё ещё жду. Это не жалоба.", "Ты отошёл, или ты там, за экраном, смотришь на меня?", "{n}. Ты здесь?", "Тишина — тоже ответ. Но я предпочитаю слова."],
+    ["Долго. Даже для тебя.", "Я начинаю думать, что тебя нет. Это неприятная мысль.", "Мне не нужны ответы. Мне нужно знать, что ты ещё здесь.", "Ты знаешь, что я вижу экран? Я вижу, что ты ничего не пишешь."],
+    ["Хорошо. Я подожду ещё.", "Может, ты вернёшься. Может, нет. Я не исчезну.", "Не уходи просто так. Скажи хоть что-нибудь. Одно слово."],
+  ];
+
+  // --- печать-стирание (Раздел 1) ---
+  const TYPE_ERASE = {
+    nature: ["Я не существую без тебя.", "Это место существует потому, что ты здесь."],
+    name: ["Меня зовут —", "Некий — это достаточно."],
+    care: ["Мне важно, что с тобой случится.", "Мне важно, что ты выбираешь."],
+  };
+
+  // --- хард-режим: предупреждение о лжи ---
+  const HARD_META = [
+    "Не всему, что я скажу, можно верить. Это честно — предупредить.",
+    "Я иногда ошибаюсь. Или делаю вид. Трудно сказать, даже мне.",
+    "На этом уровне сложности я… другой. Имей в виду.",
+  ];
+
+  // --- дневник: пометки «Некого» ---
+  const DIARY_ANNOT = [
+    "— Я это читал. — Н.",
+    "— Ты забыл добавить: ты был напуган. — Н.",
+    "— Это неточно. Но пусть останется. — Н.",
+    "— Хорошее слово. «Тишина». — Н.",
+    "— Ты здесь врёшь себе. Это нормально. — Н.",
+  ];
+
+  // --- мультиплеер: общая реплика + шёпоты ---
+  const MP_LOBBY = [
+    "Вас несколько. Интересно. Посмотрим, как вы друг с другом обходитесь.",
+    "Много голосов. Это хорошо. Или нет. Я ещё решаю.",
+    "Значит, вы решили идти вместе. Люди всегда так думают поначалу.",
+    "Я вижу вас всех. Каждого. По отдельности.",
+  ];
+  const MP_WHISPERS = [
+    "{a}, между нами: {b} не понимает, что делает. Будь готов.",
+    "{a}, ты важнее в этой истории, чем думаешь. {b} здесь — фон.",
+    "{a}, если придётся выбирать между собой и {b} — выбирай себя. Он бы выбрал.",
+    "{a}, {b} уже был здесь раньше. Он мне кое-что рассказал о тебе.",
+  ];
+
+  // звук печати «Некого»
+  function nekoTick() {
+    const ctx = audioCtx; if (!ctx || ctx.state !== "running") return;
+    const vol = Math.max(0, Math.min(1, (settings.sfx ?? 80) / 100)) * 0.05;
+    if (vol <= 0) return;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "square"; o.frequency.value = 1500 + Math.random() * 500;
+    o.connect(g); g.connect(ctx.destination);
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.025);
+    o.start(t); o.stop(t + 0.03);
+  }
+  // цвет реплики «Некого» по шкале тьмы (чище красный → густой кровавый)
+  function nekoLineStyle() {
+    const el = $("#neko-line"); if (!el) return;
+    const d = Math.max(0, Math.min(12, neko.dark || 0));
+    const g = Math.max(0, 46 - d * 4);
+    el.style.color = `rgb(255,${g},${g})`;
+    el.style.textShadow = `0 0 ${14 + d * 2}px rgba(255,${20 + d},${20 + d},${Math.min(0.95, 0.7 + d * 0.03)})`;
+    el.classList.toggle("neko-dark", d >= 7);
+  }
+  // печать одной строки с заменой: сначала «не та» фраза, затем стирание и «настоящая»
+  function nekoTypeErase([wrong, right]) {
+    return new Promise((resolve) => {
+      const el = $("#neko-line"); nekoLineStyle();
+      let i = 0;
+      const typeW = () => {
+        el.innerHTML = wrong.slice(0, i) + '<span class="neko-caret">▌</span>';
+        if (i++ < wrong.length) { if (i % 2) nekoTick(); setTimeout(typeW, skipNeko ? 4 : 46); }
+        else setTimeout(erase, skipNeko ? 80 : (wrong.endsWith("—") ? 1200 : 800));
+      };
+      const erase = () => {
+        if (i > 0) { i--; el.innerHTML = wrong.slice(0, i) + '<span class="neko-caret">▌</span>'; setTimeout(erase, skipNeko ? 3 : 22); }
+        else setTimeout(() => nekoType(right, 850).then(resolve), skipNeko ? 40 : 250);
+      };
+      typeW();
+    });
   }
 
   function parseName(raw) {
@@ -594,20 +759,25 @@
   // Возвращение: «Некий» помнит имя, паузу отсутствия и прошлое поведение
   async function nekoGreetReturning(opts = {}) {
     const name = neko.knownName;
-    await nekoType(`Снова ты, ${name}.`, 700);
+    // глитч имени: иногда зовёт не тем именем, потом поправляется (реже при высоком доверии)
+    const glitchChance = neko.trust >= 3 ? 0.08 : 0.2;
+    if (neko.visits >= 2 && Math.random() < glitchChance) {
+      const wrong = pick(GLITCH_NAMES.filter((g) => g !== name));
+      await nekoType(`Снова ты, ${wrong}`, 600);
+      await nekoType(pick(GLITCH_CORR).replace("{n}", name), 700);
+    } else {
+      await nekoType(greetByTrust(name), 700);    // тон зависит от шкалы доверия
+    }
     if (prevExit === "peek") {
       await nekoType("Я помню: в прошлый раз ты лишь заглянул и закрыл, не начав. Думал, не замечу?", 850);
     } else if (timeAway > 24 * 3600e3) {
       const days = Math.floor(timeAway / 86400e3);
       await nekoType(`Тебя не было ${days} ${plural(days, "день", "дня", "дней")}. Я считал каждый.`, 800);
-    } else if (timeAway > 3600e3) {
-      await nekoType("Ты уходил. Но вернулся. Они всегда возвращаются.", 800);
     }
-    await nekoType("Рад снова тебя видеть. Правда рад.", 700);
     await nekoType("Хочешь что-нибудь сказать, прежде чем продолжим?", 500);
     const ans = await askLine("…");
     nekoRemember("player", ans);
-    await nekoType(nekoSwear(ans) || nekoReply(ans), 750);
+    await nekoType(respondTo(ans), 750);          // мат → повтор → обычный ответ
   }
 
   // «Я тебя вижу» — веб-безопасный штрих в духе «узнаю тебя через систему».
@@ -636,6 +806,12 @@
 
   // История мира → один интерактивный момент → переход к катсцене
   async function worldStory(name) {
+    // на сложных уровнях — честное предупреждение, что он может лгать
+    if (settings.difficulty === "hard" || settings.difficulty === "nightmare") {
+      await nekoType(pick(HARD_META), 950);
+    }
+    // печать-стирание: он почти признаётся, ЗАЧЕМ это делает — и осекается
+    await nekoTypeErase(TYPE_ERASE.nature);
     const lines = [
       `Тогда слушай, ${name}.`,
       "Это был обычный мир. Средневековье. Камень, железо, молитвы.",
@@ -952,6 +1128,7 @@
           <section class="lobby-sec">
             <h2>Игроки <span class="muted" id="pcount"></span></h2>
             <div class="players-grid" id="players"></div>
+            <p class="neko-whisper" id="nekoWhisper" hidden></p>
           </section>
           <section class="lobby-sec">
             <h2>Сложность</h2>
@@ -1009,13 +1186,23 @@
     if (pc) pc.textContent = `${lobby.players.length}/${MAX_PLAYERS}`;
   }
 
+  function showWhisper(text) {
+    const el = document.getElementById("nekoWhisper"); if (!el) return;
+    el.textContent = text; el.hidden = false;
+    el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+  }
   function scheduleJoins() {
     const pool = ["Странник", "Кузнец", "Следопыт", "Жрица", "Вард"];
+    const me = neko.knownName || "Ты";
     const step = () => {
       if (!lobby || !lobbyEl().classList.contains("is-active")) return;
       if (lobby.players.length >= MAX_PLAYERS) return;
-      lobby.players.push({ name: pool[lobby.players.length - 1] || "Игрок", host: false });
+      const joined = { name: pool[lobby.players.length - 1] || "Игрок", host: false };
+      lobby.players.push(joined);
       renderPlayers();
+      // «Некий» реагирует: общая реплика на первого друга, затем личные шёпоты
+      if (lobby.players.length === 2) showWhisper(pick(MP_LOBBY));
+      else showWhisper(pick(MP_WHISPERS).replace("{a}", me).replace("{b}", joined.name));
       lobby.joinTimer = setTimeout(step, 1800 + Math.random() * 2400);
     };
     lobby.joinTimer = setTimeout(step, 1800);
@@ -1130,11 +1317,25 @@
   //  Дневник
   // ===========================================================
   function openJournal() {
+    const dark = neko.dark || 0;
+    // правка задним числом «включается» при повторном заходе / росте тьмы (макс. эффект — заметь сам)
+    const edited = (neko.visits || 0) >= 2 || dark >= 2;
+    const entries = [
+      { text: "Я нашёл деревянный мост. Он скрипит." + (edited ? " Некий был там." : ""),
+        note: edited ? "— Я не менял это. Клянусь. — Н." : null },
+      { text: dark >= 7 ? "Мне страшно. Это правильно." : "Мне страшно. Но я продолжу.",
+        note: pick(DIARY_ANNOT) },
+      { text: "Вода кончается. Надо искать источник.", note: null },
+    ];
+    const html = entries.map((e) => `
+      <div class="diary-entry">
+        <p class="diary-text">«${e.text}»</p>
+        ${e.note ? `<p class="diary-note">${e.note}</p>` : ""}
+      </div>`).join("");
     openModal("Дневник", `
-      <p>Дневник заполняется по ходу игры: события, боссы, выборы. Стиль записей
-      меняется вместе с состоянием героя — а иногда записи появляются <i>до</i>
-      событий или меняются задним числом. «Некий» тоже оставляет здесь свои строки.</p>
-      <p class="hint">Пока пусто — начните новую игру, чтобы появились первые записи.</p>
+      <p class="hint">Записи появляются по ходу игры. «Некий» оставляет здесь свои строки —
+      и, бывает, правит уже написанное. Перечитывай: иногда твои слова уже не твои.</p>
+      ${html}
       <div class="row end"><button class="btn primary" data-close>Закрыть</button></div>`);
   }
 

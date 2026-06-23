@@ -630,6 +630,32 @@ html, body {
 }
 .neko-caret { animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
+/* высокая «тьма» — нервное, неровное свечение реплики «Некого» */
+.neko-line.neko-dark { animation: neko-dark-flicker 1.7s infinite; }
+@keyframes neko-dark-flicker {
+  0%, 100% { opacity: 0.95; filter: none; }
+  18% { opacity: 0.6; }
+  20% { opacity: 0.92; filter: blur(0.4px); }
+  52% { opacity: 0.75; }
+  54% { opacity: 0.96; }
+  77% { opacity: 0.55; filter: blur(0.6px); }
+  79% { opacity: 0.9; filter: none; }
+}
+/* дневник — записи + пометки «Некого» */
+.diary-entry { border-left: 2px solid rgba(243,231,207,0.25); padding: 6px 0 6px 14px; margin: 0 0 14px; }
+.diary-text { margin: 0; font-size: 16px; line-height: 1.5; color: #e3d8c2; font-style: italic; }
+.diary-note { margin: 6px 0 0; font-size: 14px; color: #ff5b5b; font-style: italic; text-shadow: 0 0 8px rgba(255,30,30,0.5); }
+/* мультиплеер — шёпот «Некого» в лобби */
+.neko-whisper {
+  margin: 12px 0 0; padding: 10px 12px;
+  border-left: 2px solid rgba(255,46,46,0.5);
+  background: rgba(40,0,0,0.25); border-radius: 0 8px 8px 0;
+  color: #ff7a7a; font-style: italic; font-size: 14px;
+  text-shadow: 0 0 8px rgba(255,30,30,0.45);
+  opacity: 0; transition: opacity .5s ease;
+}
+.neko-whisper[hidden] { display: none; }
+.neko-whisper.show { opacity: 0.95; }
 .neko-skip {
   position: absolute; bottom: 28px; right: 32px;
   background: none; border: none; color: rgba(255,80,80,0.6);
