@@ -43,6 +43,7 @@
   }
   let neko = nekoLoad();
   let sessionLaunched = false;          // запускал ли игрок игру в этом заходе
+  let leftLobbySession = false;         // выходил ли игрок из лобби в этом заходе
   let dwellTimer = null;
   const prevExit = neko.lastExit;       // как игрок ушёл в прошлый раз: 'peek' | 'played'
   const timeAway = neko.lastSeen ? Date.now() - neko.lastSeen : 0;
@@ -114,26 +115,39 @@
   // затем — выбор сложности и героя.
   function newGameFlow() {
     sessionLaunched = true;
-    nekoNameIntro((name) => {
+    const changedMind = leftLobbySession;
+    leftLobbySession = false;
+    runNekoIntro((name) => {
       playerName = name;
       chooseDifficulty();
-    });
+    }, { changedMind });
   }
 
   function chooseDifficulty() {
+    let picked = settings.difficulty;
     const list = DIFFICULTIES.map(([id, name, sub]) =>
-      `<div class="opt${settings.difficulty === id ? " is-selected" : ""}" data-diff="${id}">
+      `<div class="opt${picked === id ? " is-selected" : ""}" data-diff="${id}">
          <span>${name}</span><span class="opt-sub">${sub}</span>
        </div>`).join("");
     const wrap = document.createElement("div");
     wrap.innerHTML = `<p>Выберите сложность. На высоких — больше боссов, квестов и предметов.</p>
-      <div class="opt-list">${list}</div>`;
+      <div class="opt-list">${list}</div>
+      <div class="row end" style="margin-top:18px">
+        <button class="btn primary" id="diffNext">Дальше →</button>
+      </div>`;
+    const next = wrap.querySelector("#diffNext");
     wrap.querySelectorAll("[data-diff]").forEach((node) =>
       node.addEventListener("click", () => {
-        settings.difficulty = node.dataset.diff;
-        saveSettings(settings);
-        chooseHero();
+        picked = node.dataset.diff;
+        wrap.querySelectorAll("[data-diff]").forEach((n) =>
+          n.classList.toggle("is-selected", n.dataset.diff === picked));
       }));
+    next.addEventListener("click", () => {
+      settings.difficulty = picked;
+      saveSettings(settings);
+      closeModal();
+      chooseHero();
+    });
     openModal("Новая игра — сложность", wrap);
   }
 
@@ -353,6 +367,18 @@
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   let skipNeko = false;
 
+  // Реплика игрока — зелёная и чуть подсвеченная, в отличие от красного «Некого».
+  function playerEcho(text) {
+    const el = $("#neko-player"); if (!el) return;
+    const t = (text || "").trim();
+    el.textContent = t ? `«${t}»` : "…";
+    el.classList.add("show");
+  }
+  function clearPlayerEcho() {
+    const el = $("#neko-player"); if (!el) return;
+    el.textContent = ""; el.classList.remove("show");
+  }
+
   function makeCode(lines) {
     const ch = "01xX#@/\\|<>[]{}()=+*-ABCDEF0123456789░▒▓§∆ΣλØ";
     const rnd = (n) => Array.from({ length: n }, () => ch[Math.floor(Math.random() * ch.length)]).join("");
@@ -399,11 +425,13 @@
   function askLine(placeholder = "напиши ответ…") {
     return new Promise((resolve) => {
       const row = $("#neko-input-row"), input = $("#neko-input");
+      clearPlayerEcho();
       input.value = ""; input.placeholder = placeholder; row.hidden = false; input.focus();
       const submit = (e) => {
         e.preventDefault();
         const v = input.value;
         row.hidden = true; row.removeEventListener("submit", submit);
+        playerEcho(v);
         resolve(v);
       };
       row.addEventListener("submit", submit);
@@ -418,6 +446,7 @@
       const done = (val) => {
         box.hidden = true;
         yes.removeEventListener("click", oy); no.removeEventListener("click", on);
+        playerEcho(val ? "Да" : "Нет");
         resolve(val);
       };
       const oy = () => done(true), on = () => done(false);
@@ -430,6 +459,21 @@
     "что чё че а и но или о ну да нет не привет здравствуй здравствуйте эй мой моё мое моя мне тебе " +
     "называй можешь блин нихуя нифига себе вот так тут здесь is my name the").split(/\s+/));
   const SASS = ["Я спросил: КТО ТЫ.", "Слишком много текста. Просто напиши своё имя.", "Имя."];
+
+  // ---------- реакция «Некого» на ругань ----------
+  const SWEAR_RE = /(?:бл[яе][дт]?|сук[аиоуые]|\bсука\b|ху[йёеяи]|пизд|пид[оа]р|еб[аоуёные]|\bёб|объеб|уеб[аон]|муда[кч]|г[оа]ндон|говн|залуп|\bманда|шлюх|мраз|долбо[её]б|нах[уй]|похуй|зае[бо])/i;
+  const SWEAR_LINES = [
+    "Матершинник.",
+    "Ругаться нехорошо. Хотя… кто тебя тут осудит.",
+    "Сквернословишь. Я и это запомнил.",
+    "Какой язык. Здесь его, правда, некому стыдиться.",
+  ];
+  let swearIdx = 0;
+  function nekoSwear(text) {
+    if (!text) return null;
+    if (SWEAR_RE.test(String(text).toLowerCase())) return SWEAR_LINES[swearIdx++ % SWEAR_LINES.length];
+    return null;
+  }
 
   function parseName(raw) {
     const s = (raw || "").trim();
@@ -448,6 +492,8 @@
     let sassIdx = 0;
     while (true) {
       const raw = await askLine("напиши своё имя…");
+      const sw = nekoSwear(raw);
+      if (sw) { await nekoType(sw, 700); await nekoType("И всё-таки — как тебя зовут?", 500); continue; }
       const res = parseName(raw);
       if (!res.ok) {
         await nekoType(res.sass ? SASS[sassIdx++ % SASS.length] : res.msg, 650);
@@ -459,7 +505,13 @@
     }
   }
 
-  async function nekoNameIntro(onDone) {
+  // Единый сценарий появления «Некого». Параметры подстраивают его под
+  // ситуацию: соло, хост-мультиплеер, возврат после выхода из лобби и т.д.
+  //   opts.multiplayer  — флейвор «ты позвал друга»
+  //   opts.deferStory   — не рассказывать историю сейчас (отложить до старта из лобби)
+  //   opts.storyOnly    — пропустить приветствие/имя, сразу к истории (старт из лобби)
+  //   opts.changedMind  — игрок вышел из лобби и выбрал одиночную игру
+  async function runNekoIntro(onDone, opts = {}) {
     const intro = $("#neko-intro"), skip = $("#neko-skip");
     skipNeko = false;
     intro.hidden = false;
@@ -467,36 +519,71 @@
     skip.addEventListener("click", onSkip);
     const finish = () => {
       skip.removeEventListener("click", onSkip);
+      clearPlayerEcho();
       $("#neko-line").textContent = "";
       intro.hidden = true;
     };
 
     await codeRain(2000);
 
-    if (!neko.knownName) {
-      // первое знакомство — спрашиваем имя
-      await nekoType("Кто ты?", 500);
-      const name = await askName();
-      neko.knownName = name;
-      if (!neko.metAt) neko.metAt = Date.now();
-      nekoRemember("neko", "Кто ты?");
-      nekoRemember("player", name);
-      playerName = name;
-      await nekoType("…", 250);
-      await codeRain(1300);
-      await nekoType(`«${name}». Интересно.`, 900);
-    } else if (neko.storyTold) {
-      // возвращение — «Некий» помнит игрока и его поведение
-      await nekoGreetReturning();
-    } else {
-      await nekoType(`Снова ты, ${neko.knownName}. На чём мы остановились…`, 700);
+    if (!opts.storyOnly) {
+      if (opts.changedMind && neko.knownName) {
+        await nekoType("Передумал играть с друзьями?", 600);
+        await nekoType("Я бы тоже не стал. Тут опасно.", 800);
+        await nekoType("Но раз ты так решил… слушай.", 800);
+      }
+
+      if (!neko.knownName) {
+        // первое знакомство — спрашиваем имя
+        if (opts.multiplayer) {
+          await nekoType("Хм. Кто-то боится играть один и позвал друга?", 750);
+          await nekoType("Интересно.", 650);
+        }
+        await nekoType("Кто ты?", 500);
+        const name = await askName();
+        neko.knownName = name;
+        if (!neko.metAt) neko.metAt = Date.now();
+        nekoRemember("neko", "Кто ты?");
+        nekoRemember("player", name);
+        playerName = name;
+        await nekoType("…", 250);
+        await codeRain(1300);
+        await nekoType(`«${name}». Интересно.`, 900);
+        await nekoPeek();                       // «я тебя вижу» — жутковатый штрих
+      } else {
+        // возвращение — «Некий» помнит игрока и его поведение
+        await nekoGreetReturning(opts);
+      }
     }
 
-    if (!neko.storyTold) {
-      await worldStory(neko.knownName);      // рассказ истории мира (с диалогом)
+    if (opts.deferStory) {
+      await nekoType(opts.multiplayer
+        ? "Создавай лобби. А историю этого мира я расскажу, когда вы будете готовы."
+        : "Собери своих — и тогда продолжим.", 950);
+      finish();
+      sessionLaunched = true; nekoSave();
+      onDone(neko.knownName);
+      return;
+    }
+
+    if (opts.storyOnly) {
+      await nekoType("Теперь, когда вы готовы… слушай внимательно.", 800);
+    }
+
+    // Рассказать историю мира. Если уже рассказывал — спросить, повторить ли.
+    let tell = !neko.storyTold;
+    if (neko.storyTold) {
+      await nekoType("Историю этого мира я тебе уже рассказывал.", 800);
+      await nekoType("Рассказать ещё раз?", 450);
+      tell = await askConfirm();
+      await nekoType(tell ? "Хорошо. Слушай снова." : "Как знаешь. Идём дальше.", 650);
+    }
+
+    if (tell) {
+      await worldStory(neko.knownName);         // рассказ истории мира (с диалогом)
       neko.storyTold = true; nekoSave();
       finish();
-      await cutscene();                       // плавно перетекает в катсцену
+      await cutscene();                         // плавно перетекает в катсцену
     } else {
       finish();
     }
@@ -505,22 +592,46 @@
   }
 
   // Возвращение: «Некий» помнит имя, паузу отсутствия и прошлое поведение
-  async function nekoGreetReturning() {
+  async function nekoGreetReturning(opts = {}) {
     const name = neko.knownName;
     await nekoType(`Снова ты, ${name}.`, 700);
     if (prevExit === "peek") {
-      await nekoType("В прошлый раз ты заглянул на пару секунд и закрыл. Я заметил.", 800);
+      await nekoType("Я помню: в прошлый раз ты лишь заглянул и закрыл, не начав. Думал, не замечу?", 850);
     } else if (timeAway > 24 * 3600e3) {
       const days = Math.floor(timeAway / 86400e3);
-      await nekoType(`Тебя не было ${days} ${plural(days, "день", "дня", "дней")}. Я считал.`, 800);
+      await nekoType(`Тебя не было ${days} ${plural(days, "день", "дня", "дней")}. Я считал каждый.`, 800);
     } else if (timeAway > 3600e3) {
       await nekoType("Ты уходил. Но вернулся. Они всегда возвращаются.", 800);
     }
-    await nekoType("Историю мира я тебе уже рассказывал. Повторять не стану.", 800);
-    await nekoType("Хочешь что-то спросить — или сразу продолжим?", 500);
-    const ans = await askLine();
+    await nekoType("Рад снова тебя видеть. Правда рад.", 700);
+    await nekoType("Хочешь что-нибудь сказать, прежде чем продолжим?", 500);
+    const ans = await askLine("…");
     nekoRemember("player", ans);
-    await nekoType(nekoReply(ans), 700);
+    await nekoType(nekoSwear(ans) || nekoReply(ans), 750);
+  }
+
+  // «Я тебя вижу» — веб-безопасный штрих в духе «узнаю тебя через систему».
+  // Реального имени/Steam-аккаунта браузер не даёт — берём то, что доступно:
+  // часовой пояс, локальное время и ОС. Ощущение «он живой и всё знает».
+  async function nekoPeek() {
+    let tz = "", os = "";
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch {}
+    const ua = (navigator.userAgent || "");
+    os = /Windows/.test(ua) ? "Windows" : /Macintosh|Mac OS/.test(ua) ? "macOS"
+       : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS"
+       : /Linux/.test(ua) ? "Linux" : "";
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const h = now.getHours();
+    const part = h < 5 ? "Глубокая ночь" : h < 12 ? "Утро" : h < 18 ? "День" : "Поздний вечер";
+
+    await codeRain(1200);
+    await nekoType("Подожди. Я тебя… вижу.", 750);
+    if (tz) { const ln = `Часовой пояс — ${tz}.`; nekoRemember("neko", ln); await nekoType(ln, 700); }
+    { const ln = `${hh}:${mm} у тебя сейчас. ${part}, верно?`; nekoRemember("neko", ln); await nekoType(ln, 800); }
+    if (os) { const ln = `И ты пришёл с ${os}.`; nekoRemember("neko", ln); await nekoType(ln, 800); }
+    await nekoType("Не пугайся. Я вижу ещё не всё. Пока.", 900);
   }
 
   // История мира → один интерактивный момент → переход к катсцене
@@ -537,6 +648,8 @@
     await nekoType("Ты помнишь, что было до катаклизма?", 500);
     const ans = await askLine();
     nekoRemember("player", ans);
+    const sw = nekoSwear(ans);
+    if (sw) await nekoType(sw, 700);
     await nekoType(nekoReactMemory(ans), 800);
     await nekoType("Память — единственное, что я могу… поправить.", 900);
     await nekoType(`Идём, ${name}. Я покажу, что осталось.`, 800);
@@ -765,7 +878,15 @@
   const lobbyEl = () => document.getElementById("lobby-screen");
   const MAX_PLAYERS = 5;
 
-  function createLobby() { openLobby("host", randomCode()); }
+  function createLobby() {
+    sessionLaunched = true;
+    // Хост: при первом заходе всё как в соло (код, «Кто ты?»), но вместо
+    // истории мира — «создавай лобби, потом расскажу». Историю — на старте.
+    runNekoIntro(() => {
+      playerName = neko.knownName || playerName;
+      openLobby("host", randomCode());
+    }, { multiplayer: true, deferStory: true });
+  }
 
   function joinLobby() {
     const wrap = document.createElement("div");
@@ -803,7 +924,7 @@
     scr.innerHTML = lobbyHTML(mode, code);
     scr.scrollTop = 0;
 
-    scr.querySelector("[data-back]").addEventListener("click", closeLobby);
+    scr.querySelector("[data-back]").addEventListener("click", () => closeLobby());
     const copyBtn = scr.querySelector("[data-copy]");
     copyBtn.addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(code); copyBtn.textContent = "скопировано ✓"; } catch {}
@@ -946,8 +1067,11 @@
     });
   }
 
-  function closeLobby() {
+  function closeLobby(opts = {}) {
     if (lobby && lobby.joinTimer) clearTimeout(lobby.joinTimer);
+    // Уход «назад» из лобби запоминаем — «Некий» это прокомментирует,
+    // если игрок затем передумает и начнёт одиночную игру.
+    if (!opts.starting && lobby) leftLobbySession = true;
     lobby = null;
     const scr = lobbyEl();
     scr.classList.remove("is-active");
@@ -956,9 +1080,10 @@
   }
 
   function startFromLobby() {
-    closeLobby();
-    // сложность уже выбрана в лобби → интро «Некого», затем выбор героя
-    nekoNameIntro((name) => { playerName = name; chooseHero(); });
+    closeLobby({ starting: true });
+    // имя уже названо при создании лобби, сложность выбрана в лобби →
+    // теперь «Некий» рассказывает отложенную историю мира, затем выбор героя
+    runNekoIntro((name) => { playerName = name; chooseHero(); }, { storyOnly: true });
   }
 
   // ===========================================================

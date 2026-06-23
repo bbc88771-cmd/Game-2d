@@ -315,10 +315,11 @@ html, body {
 }
 .neko-input-row { display: flex; gap: 10px; align-items: center; }
 .neko-input-row[hidden] { display: none; }
+/* Игрок «говорит» зелёным — в противовес красному «Некому». */
 #neko-input {
-  background: #0a0000;
-  border: 1px solid rgba(255,46,46,0.5);
-  color: #ff7a7a;
+  background: #000a04;
+  border: 1px solid rgba(57,255,140,0.5);
+  color: #6cff9e;
   font-family: var(--serif);
   font-size: clamp(20px, 3vh, 32px);
   text-align: center;
@@ -326,9 +327,28 @@ html, body {
   border-radius: 8px;
   min-width: min(60vw, 420px);
   outline: none;
-  box-shadow: inset 0 0 18px rgba(255,30,30,0.22);
+  text-shadow: 0 0 10px rgba(57,255,140,0.6);
+  box-shadow: inset 0 0 18px rgba(57,255,140,0.22);
 }
-#neko-input:focus { border-color: #ff2e2e; box-shadow: inset 0 0 24px rgba(255,30,30,0.4); }
+#neko-input::placeholder { color: rgba(108,255,158,0.4); }
+#neko-input:focus { border-color: #39ff8c; box-shadow: inset 0 0 24px rgba(57,255,140,0.4); }
+
+/* Эхо ответа игрока — зелёное и чуть подсвеченное. */
+.neko-player {
+  margin: 0;
+  min-height: 0;
+  max-width: 880px;
+  text-align: center;
+  font-family: var(--serif);
+  font-size: clamp(18px, 2.6vw, 30px);
+  line-height: 1.4;
+  color: #6cff9e;
+  text-shadow: 0 0 12px rgba(57,255,140,0.75), 0 0 28px rgba(57,255,140,0.4);
+  letter-spacing: 0.03em;
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+.neko-player.show { opacity: 0.95; }
 #neko-send {
   background: none; border: 1px solid rgba(255,46,46,0.5); color: #ff4b4b;
   font-size: clamp(20px, 3vh, 30px); border-radius: 8px; cursor: pointer; padding: 0.15em 0.55em;
