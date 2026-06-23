@@ -123,20 +123,47 @@
     openModal("Новая игра — сложность", wrap);
   }
 
-  function chooseHero() {
-    const list = HEROES.map(([id, name, sub]) =>
-      `<div class="opt" data-hero="${id}">
-         <span>${name}</span><span class="opt-sub">${sub}</span>
-       </div>`).join("");
-    const wrap = document.createElement("div");
-    wrap.innerHTML = `<p>Выберите героя. У каждого своя история, навыки и реплики «Некого».</p>
-      <div class="opt-list">${list}</div>`;
-    wrap.querySelectorAll("[data-hero]").forEach((node) =>
-      node.addEventListener("click", () => {
-        closeModal();
-        startWorldStub(node.dataset.hero);
+  // Полноэкранный выбор персонажа (после катсцены)
+  function chooseHero() { openHeroSelect(); }
+
+  function openHeroSelect() {
+    const scr = document.getElementById("hero-screen");
+    document.getElementById("menu-screen").classList.remove("is-active");
+    scr.classList.add("is-active");
+    scr.innerHTML = `
+      <div class="hero-wrap">
+        <header class="lobby-head">
+          <button class="btn" data-back>← Назад</button>
+          <h1>Выбор персонажа</h1>
+        </header>
+        <p class="muted">${playerName ? `«${playerName}», в` : "В"}ыбери, кем встретить этот мир —
+          у каждого своя история, навыки и реплики «Некого».</p>
+        <div class="hero-grid">
+          ${HEROES.map(([id, name, sub]) => `
+            <article class="hero-card" data-hero="${id}" tabindex="0">
+              <img src="assets/img/hero_${id}.svg" alt="${name}" loading="lazy">
+              <div class="hero-info">
+                <h3>${name}</h3>
+                <p>${sub}</p>
+              </div>
+              <span class="hero-pick">Выбрать</span>
+            </article>`).join("")}
+        </div>
+      </div>`;
+    scr.scrollTop = 0;
+    scr.querySelector("[data-back]").addEventListener("click", closeHeroSelect);
+    scr.querySelectorAll("[data-hero]").forEach((card) =>
+      card.addEventListener("click", () => {
+        closeHeroSelect();
+        startWorldStub(card.dataset.hero);
       }));
-    openModal("Новая игра — герой", wrap);
+  }
+
+  function closeHeroSelect() {
+    const scr = document.getElementById("hero-screen");
+    scr.classList.remove("is-active");
+    scr.innerHTML = "";
+    document.getElementById("menu-screen").classList.add("is-active");
   }
 
   // ===========================================================
@@ -363,29 +390,94 @@
     return many;
   }
 
-  // Катсцена: кадры с подписями, плавно сменяющие друг друга
+  // ---------- звук: процедурный тёмный эмбиент (Web Audio) ----------
+  let audioCtx = null;
+  function ensureAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    } catch {}
+    return audioCtx;
+  }
+  ["pointerdown", "keydown"].forEach((ev) => window.addEventListener(ev, ensureAudio));
+
+  function startAmbient() {
+    const ctx = ensureAudio(); if (!ctx) return null;
+    const master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+    const vol = Math.max(0, Math.min(1, (settings.music ?? 70) / 100)) * 0.5;
+    const t0 = ctx.currentTime; master.gain.linearRampToValueAtTime(vol, t0 + 2);
+
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 480; lp.connect(master);
+    const o1 = ctx.createOscillator(); o1.type = "sawtooth"; o1.frequency.value = 55;
+    const o2 = ctx.createOscillator(); o2.type = "sine"; o2.frequency.value = 82.4;
+    const g1 = ctx.createGain(); g1.gain.value = 0.16; o1.connect(g1).connect(lp);
+    const g2 = ctx.createGain(); g2.gain.value = 0.12; o2.connect(g2).connect(lp);
+    const lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 0.07;
+    const lfoG = ctx.createGain(); lfoG.gain.value = vol * 0.4; lfo.connect(lfoG).connect(master.gain);
+
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const dd = buf.getChannelData(0); for (let i = 0; i < dd.length; i++) dd[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 620; bp.Q.value = 0.6;
+    const ng = ctx.createGain(); ng.gain.value = 0.05; noise.connect(bp).connect(ng).connect(master);
+
+    [o1, o2, lfo].forEach((o) => o.start()); noise.start();
+    return { ctx, master, nodes: [o1, o2, lfo, noise] };
+  }
+  function stopAmbient(a) {
+    if (!a) return;
+    const t = a.ctx.currentTime;
+    try {
+      a.master.gain.cancelScheduledValues(t);
+      a.master.gain.setValueAtTime(a.master.gain.value, t);
+      a.master.gain.linearRampToValueAtTime(0, t + 1.2);
+      setTimeout(() => a.nodes.forEach((n) => { try { n.stop(); } catch {} }), 1400);
+    } catch {}
+  }
+  function bell(a, freq) {
+    if (!a) return;
+    const ctx = a.ctx, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine"; o.frequency.value = freq; o.connect(g); g.connect(a.master);
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.14, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+    o.start(t); o.stop(t + 1.9);
+  }
+
+  // Катсцена: слегка анимированные кадры (Ken Burns) + текст + звук;
+  // в конце экран затухает и открывается полноэкранный выбор персонажа.
   async function cutscene() {
     const cs = $("#cutscene"), frame = $("#cut-frame"), cap = $("#cut-caption"), skip = $("#cut-skip");
     let skipped = false;
     const onS = () => { skipped = true; };
     skip.addEventListener("click", onS);
-    cs.hidden = false;
+    cs.hidden = false; cs.classList.remove("fade-out");
+    const audio = startAmbient();
     const frames = [
-      ["assets/img/background.jpg", "Мир, который ты знал, уже закончился."],
-      ["assets/img/loc_dead.svg", "Земля треснула и высохла. Вода ушла."],
-      ["assets/img/loc_magic.svg", "Из трещин пришли души — и заняли всё живое."],
-      [null, "Осталось только это.\nИ ты."],
+      ["assets/img/background.jpg", "Мир, который ты знал, уже закончился.", 196],
+      ["assets/img/loc_dead.svg", "Земля треснула и высохла. Вода ушла.", 165],
+      ["assets/img/loc_magic.svg", "Из трещин пришли души — и заняли всё живое.", 220],
+      [null, "Осталось только это.\nИ ты.", 110],
     ];
-    for (const [img, text] of frames) {
+    for (const [img, text, freq] of frames) {
       if (skipped) break;
+      frame.style.opacity = "0";
+      await wait(skipped ? 0 : 320);                    // плавный переход между кадрами
       frame.style.backgroundImage = img ? `url("${img}")` : "none";
+      frame.classList.remove("kb"); void frame.offsetWidth; frame.classList.add("kb"); // Ken Burns
       frame.style.opacity = img ? "1" : "0";
       cap.textContent = text;
       cap.classList.remove("show"); void cap.offsetWidth; cap.classList.add("show");
-      await wait(skipped ? 120 : 2700);
+      bell(audio, freq);
+      await wait(skipped ? 140 : 2700);
     }
+    cap.classList.remove("show");
+    cs.classList.add("fade-out");                       // затухание всего экрана
+    await wait(900);
+    stopAmbient(audio);
     skip.removeEventListener("click", onS);
-    cs.hidden = true;
+    cs.hidden = true; cs.classList.remove("fade-out");
   }
 
   // Присутствие «Некого» в меню — реагирует на поведение игрока

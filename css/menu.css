@@ -473,6 +473,47 @@ html, body {
 .cut-caption.show { opacity: 1; transform: none; }
 .cutscene .neko-skip { color: rgba(243,231,207,0.6); }
 .cutscene .neko-skip:hover { color: #f3e7cf; }
+.cut-frame.kb { animation: ken-burns 3.4s ease-out forwards; }
+@keyframes ken-burns { from { transform: scale(1.0); } to { transform: scale(1.1); } }
+.cutscene.fade-out { transition: opacity 0.9s ease; opacity: 0; }
+
+/* ===========================================================
+   Полноэкранный выбор персонажа
+   =========================================================== */
+#hero-screen { overflow: auto; background: #0c0a08; color: var(--gold); }
+#hero-screen.is-active { animation: hero-fade-in 0.8s ease; }
+@keyframes hero-fade-in { from { opacity: 0; } to { opacity: 1; } }
+#hero-screen::before {
+  content: ""; position: fixed; inset: 0; z-index: 0;
+  background: url("../assets/img/background.jpg") center/cover no-repeat;
+  filter: blur(8px) brightness(0.28) saturate(0.85);
+}
+.hero-wrap { position: relative; z-index: 1; max-width: 1300px; margin: 0 auto; padding: clamp(16px,3vh,34px) clamp(16px,3vw,44px); }
+.hero-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: clamp(14px, 1.8vw, 24px); margin-top: 22px;
+}
+.hero-card {
+  display: flex; flex-direction: column; align-items: center;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(243,231,207,0.16);
+  border-radius: 12px; overflow: hidden; cursor: pointer;
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.hero-card:hover, .hero-card:focus-visible {
+  transform: translateY(-4px); border-color: var(--ember);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,138,43,0.4);
+  outline: none;
+}
+.hero-card img { width: 100%; aspect-ratio: 26 / 30; object-fit: cover; background: #000; display: block; }
+.hero-info { padding: 12px 14px 6px; text-align: center; }
+.hero-info h3 { margin: 0 0 4px; font-family: var(--serif); font-size: 20px; color: var(--gold-bright); }
+.hero-info p { margin: 0; font-size: 13px; line-height: 1.4; color: #cabfa9; }
+.hero-pick {
+  margin: 10px 0 14px; font-family: var(--serif); font-size: 15px; letter-spacing: 0.04em;
+  color: var(--ember); border: 1px solid rgba(255,138,43,0.5); border-radius: 8px; padding: 6px 18px;
+  transition: background .15s, color .15s;
+}
+.hero-card:hover .hero-pick { background: var(--ember); color: #1a0e04; }
 .neko-line {
   max-width: 880px;
   text-align: center;
