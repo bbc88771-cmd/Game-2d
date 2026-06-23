@@ -189,10 +189,10 @@
     });
   }
 
-  function askLine() {
+  function askLine(placeholder = "напиши ответ…") {
     return new Promise((resolve) => {
       const row = $("#neko-input-row"), input = $("#neko-input");
-      input.value = ""; row.hidden = false; input.focus();
+      input.value = ""; input.placeholder = placeholder; row.hidden = false; input.focus();
       const submit = (e) => {
         e.preventDefault();
         const v = input.value;
@@ -240,7 +240,7 @@
   async function askName() {
     let sassIdx = 0;
     while (true) {
-      const raw = await askLine();
+      const raw = await askLine("напиши своё имя…");
       const res = parseName(raw);
       if (!res.ok) {
         await nekoType(res.sass ? SASS[sassIdx++ % SASS.length] : res.msg, 650);
