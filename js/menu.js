@@ -272,49 +272,36 @@
     return Array.from({ length: 6 }, () => a[Math.floor(Math.random() * a.length)]).join("");
   }
 
-  function createLobby() {
-    const code = randomCode();
-    const wrap = document.createElement("div");
-    wrap.innerHTML = `
-      <p>Поделитесь кодом с друзьями (до 5 игроков). Когда все зайдут — начинайте.</p>
-      <div class="code-box">${code}</div>
-      <div class="row"><button class="btn" id="copy">Скопировать код</button>
-        <span class="hint" id="copied" style="opacity:0">скопировано ✓</span></div>
-      <div class="players" id="players">
-        <span class="player-chip host"><span class="dot"></span>Вы (хост)</span>
-      </div>
-      <p class="hint" style="margin-top:18px">Сетевой слой пока имитируется локально —
-      это каркас под реальную синхронизацию мира, стройки и боя.</p>
-      <div class="row end"><button class="btn primary" id="start" disabled>Ожидание игроков…</button></div>`;
-    openModal("Создать лобби", wrap);
+  // ===========================================================
+  //  Лобби (полноэкранное): игроки (до 5, хост), панель локаций,
+  //  сложность, моды (вкл/выкл, подсветка модов друзей, свой мод).
+  //  Сеть пока имитируется локально (заглушка под синхронизацию).
+  // ===========================================================
+  const LOCATIONS = [
+    { img: "assets/img/loc_start.svg", name: "Стартовый остров", who: "Жители: люди",
+      desc: "Большой остров: леса, реки, мало воды. 3–4 враждующие деревни. Боссы: 3 главных и мини-боссы." },
+    { img: "assets/img/loc_snow.svg", name: "Снежный", who: "Жители: люди и полу-люди",
+      desc: "Бури и снег заметают следы. Медузы, светлячки. Босс: охотники с волками." },
+    { img: "assets/img/loc_dead.svg", name: "Мёртвый (пустыня)", who: "Жители: полумёртвые люди",
+      desc: "Засуха, черви, драугры. Боссы: драугры и черви." },
+    { img: "assets/img/loc_swamp.svg", name: "Болотный", who: "Жители: рептилии (двуногие)",
+      desc: "Тина, черепахи, болотники. Босс: болотники." },
+    { img: "assets/img/loc_magic.svg", name: "Волшебный", who: "Жители: гномики",
+      desc: "Магия и источник: единороги, леприкон, пикси. Боссы: рогатая жаба, воробей в броне." },
+  ];
 
-    $("#copy", wrap).addEventListener("click", async () => {
-      try { await navigator.clipboard.writeText(code); } catch {}
-      const c = $("#copied", wrap); c.style.opacity = 1; setTimeout(() => (c.style.opacity = 0), 1500);
-    });
+  let modsState = [
+    { name: "Расширенный бестиарий", sub: "Доп. мобы и дроп-таблицы", on: true, friend: false },
+    { name: "Больше построек", sub: "+12 зданий и декор", on: false, friend: false },
+    { name: "Хардкор-выживание", sub: "Голод, жажда, температура", on: false, friend: true },
+    { name: "Уютные ночи", sub: "Светлячки и костры у лагеря", on: false, friend: true },
+  ];
 
-    // имитация подключения игроков
-    const players = $("#players", wrap);
-    const names = ["Странник", "Кузнец", "Следопыт", "Жрица"];
-    let joined = 0;
-    const startBtn = $("#start", wrap);
-    const tick = () => {
-      if (modalRoot.hidden || joined >= names.length) {
-        if (joined > 0) { startBtn.disabled = false; startBtn.textContent = "Начать игру"; }
-        return;
-      }
-      joined++;
-      const chip = document.createElement("span");
-      chip.className = "player-chip";
-      chip.innerHTML = `<span class="dot"></span>${names[joined - 1]}`;
-      players.appendChild(chip);
-      startBtn.disabled = false;
-      startBtn.textContent = "Начать игру";
-      if (joined < names.length) setTimeout(tick, 1400 + Math.random() * 1600);
-    };
-    setTimeout(tick, 1600);
-    startBtn.addEventListener("click", () => { closeModal(); newGameFlow(); });
-  }
+  let lobby = null;
+  const lobbyEl = () => document.getElementById("lobby-screen");
+  const MAX_PLAYERS = 5;
+
+  function createLobby() { openLobby("host", randomCode()); }
 
   function joinLobby() {
     const wrap = document.createElement("div");
@@ -332,18 +319,182 @@
         <button class="btn primary" id="join">Войти</button>
       </div>`;
     openModal("Ввести код", wrap);
-    const input = $("#code", wrap);
-    const status = $("#status", wrap);
+    const input = $("#code", wrap), status = $("#status", wrap);
     input.focus();
-    $("#join", wrap).addEventListener("click", () => {
+    const go = () => {
       const code = input.value.trim().toUpperCase();
-      if (code.length < 4) { status.textContent = "Введите корректный код (6 символов)."; return; }
-      status.textContent = `Подключение к лобби ${code}…`;
-      setTimeout(() => {
-        status.textContent = "Подключено. Ожидаем старт от хоста…";
-      }, 1200);
+      if (code.length < 4) { status.textContent = "Введите корректный код (минимум 4 символа)."; return; }
+      closeModal();
+      openLobby("guest", code);
+    };
+    $("#join", wrap).addEventListener("click", go);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  }
+
+  function openLobby(mode, code) {
+    lobby = { mode, code, players: [{ name: playerName || "Вы", host: true }], joinTimer: null };
+    document.getElementById("menu-screen").classList.remove("is-active");
+    const scr = lobbyEl();
+    scr.classList.add("is-active");
+    scr.innerHTML = lobbyHTML(mode, code);
+    scr.scrollTop = 0;
+
+    scr.querySelector("[data-back]").addEventListener("click", closeLobby);
+    const copyBtn = scr.querySelector("[data-copy]");
+    copyBtn.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(code); copyBtn.textContent = "скопировано ✓"; } catch {}
+      setTimeout(() => (copyBtn.textContent = "копировать"), 1500);
     });
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") $("#join", wrap).click(); });
+    scr.querySelector("#addMod").addEventListener("click", addCustomMod);
+    const start = scr.querySelector("#startGame");
+    if (start) start.addEventListener("click", startFromLobby);
+
+    renderPlayers(); renderDifficulty(); renderMods();
+    scheduleJoins();
+  }
+
+  function lobbyHTML(mode, code) {
+    return `
+    <div class="lobby-wrap">
+      <header class="lobby-head">
+        <button class="btn" data-back>← В меню</button>
+        <h1>Лобби</h1>
+        <div class="lobby-code">${mode === "host" ? "Код:" : "Лобби:"} <b>${code}</b>
+          <button class="btn small" data-copy>копировать</button></div>
+      </header>
+      <div class="lobby-body">
+        <div class="lobby-left">
+          <section class="lobby-sec">
+            <h2>Игроки <span class="muted" id="pcount"></span></h2>
+            <div class="players-grid" id="players"></div>
+          </section>
+          <section class="lobby-sec">
+            <h2>Сложность</h2>
+            <div class="diff-row" id="diffRow"></div>
+            ${mode === "guest" ? '<p class="muted">Сложность задаёт хост.</p>' : ""}
+          </section>
+          <section class="lobby-sec">
+            <h2>Моды</h2>
+            <div class="mods-list" id="modsList"></div>
+            <button class="btn small" id="addMod">+ Добавить свой мод</button>
+          </section>
+          <div class="lobby-actions">
+            ${mode === "host"
+              ? '<button class="btn primary big" id="startGame">Начать игру</button>'
+              : '<div class="hint big">Ждём, пока хост начнёт игру…</div>'}
+          </div>
+        </div>
+        <aside class="lobby-right">
+          <h2>Локации</h2>
+          <p class="muted">5 островов — следующий открывается после победы над боссами текущего.</p>
+          <div class="loc-grid">
+            ${LOCATIONS.map((l) => `
+              <article class="loc-card">
+                <img src="${l.img}" alt="${l.name}" loading="lazy">
+                <div class="loc-meta">
+                  <h3>${l.name}</h3>
+                  <span class="loc-who">${l.who}</span>
+                  <p>${l.desc}</p>
+                </div>
+              </article>`).join("")}
+          </div>
+        </aside>
+      </div>
+    </div>`;
+  }
+
+  function renderPlayers() {
+    const grid = document.getElementById("players"); if (!grid) return;
+    let html = "";
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+      const p = lobby.players[i];
+      if (p) {
+        const initial = (p.name || "?").trim().charAt(0).toUpperCase() || "?";
+        html += `<div class="player-slot ${p.host ? "host" : ""}">
+          <span class="avatar">${initial}</span>
+          <span class="pname">${p.name}</span>
+          ${p.host ? '<span class="host-badge">хост</span>' : '<span class="ready">готов</span>'}
+        </div>`;
+      } else {
+        html += '<div class="player-slot empty"><span class="avatar">+</span><span class="pname">Свободно</span></div>';
+      }
+    }
+    grid.innerHTML = html;
+    const pc = document.getElementById("pcount");
+    if (pc) pc.textContent = `${lobby.players.length}/${MAX_PLAYERS}`;
+  }
+
+  function scheduleJoins() {
+    const pool = ["Странник", "Кузнец", "Следопыт", "Жрица", "Вард"];
+    const step = () => {
+      if (!lobby || !lobbyEl().classList.contains("is-active")) return;
+      if (lobby.players.length >= MAX_PLAYERS) return;
+      lobby.players.push({ name: pool[lobby.players.length - 1] || "Игрок", host: false });
+      renderPlayers();
+      lobby.joinTimer = setTimeout(step, 1800 + Math.random() * 2400);
+    };
+    lobby.joinTimer = setTimeout(step, 1800);
+  }
+
+  function renderDifficulty() {
+    const row = document.getElementById("diffRow"); if (!row) return;
+    const guest = lobby.mode === "guest";
+    row.innerHTML = DIFFICULTIES.map(([id, name, sub]) =>
+      `<button class="diff-btn ${settings.difficulty === id ? "active" : ""}" data-diff="${id}" title="${sub}" ${guest ? "disabled" : ""}>${name}</button>`).join("");
+    if (guest) return;
+    row.querySelectorAll("[data-diff]").forEach((b) => b.addEventListener("click", () => {
+      settings.difficulty = b.dataset.diff; saveSettings(settings); renderDifficulty();
+    }));
+  }
+
+  function renderMods() {
+    const list = document.getElementById("modsList"); if (!list) return;
+    list.innerHTML = modsState.map((m, i) => `
+      <div class="mod-row ${m.friend ? "friend" : ""}">
+        <div class="mod-info">
+          <span class="mod-name">${m.name}${m.custom ? ' <span class="mod-tag">свой</span>' : ""}${m.friend ? ' <span class="mod-tag friend-tag">у друга</span>' : ""}</span>
+          <span class="mod-sub">${m.sub}</span>
+        </div>
+        <span class="toggle"><input type="checkbox" data-mod="${i}" ${m.on ? "checked" : ""}><span class="track"></span></span>
+      </div>`).join("");
+    list.querySelectorAll("[data-mod]").forEach((cb) =>
+      cb.addEventListener("change", () => { modsState[+cb.dataset.mod].on = cb.checked; }));
+  }
+
+  function addCustomMod() {
+    const list = document.getElementById("modsList");
+    const row = document.createElement("div");
+    row.className = "mod-row adding";
+    row.innerHTML = `<input class="mod-input" type="text" maxlength="40" placeholder="Название своего мода…">
+      <button class="btn small" data-add>Добавить</button>`;
+    list.appendChild(row);
+    const input = row.querySelector(".mod-input"); input.focus();
+    const add = () => {
+      const name = input.value.trim();
+      if (!name) { row.remove(); return; }
+      modsState.push({ name, sub: "Свой мод", on: true, custom: true });
+      renderMods();
+    };
+    row.querySelector("[data-add]").addEventListener("click", add);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") add();
+      if (e.key === "Escape") row.remove();
+    });
+  }
+
+  function closeLobby() {
+    if (lobby && lobby.joinTimer) clearTimeout(lobby.joinTimer);
+    lobby = null;
+    const scr = lobbyEl();
+    scr.classList.remove("is-active");
+    scr.innerHTML = "";
+    document.getElementById("menu-screen").classList.add("is-active");
+  }
+
+  function startFromLobby() {
+    closeLobby();
+    // сложность уже выбрана в лобби → интро «Некого», затем выбор героя
+    nekoNameIntro((name) => { playerName = name; chooseHero(); });
   }
 
   // ===========================================================
