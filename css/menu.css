@@ -308,6 +308,32 @@ html, body {
   text-shadow: 0 0 10px rgba(255,80,80,0.95), 0 0 18px rgba(255,40,40,0.7);
 }
 
+/* «досье» игрока — всплывает на время скана (имя, время, откуда зашёл и пр.) */
+.neko-scan {
+  position: fixed; z-index: 3;
+  top: clamp(10px, 4vh, 44px); right: clamp(10px, 3vw, 44px);
+  max-width: min(360px, 82vw);
+  font-family: "DejaVu Sans Mono", ui-monospace, monospace;
+  font-size: clamp(11px, 1.55vh, 14px);
+  line-height: 1.55;
+  color: #ff5a5a;
+  background: rgba(18,0,0,0.62);
+  border: 1px solid rgba(255,40,40,0.5);
+  box-shadow: 0 0 26px rgba(255,30,30,0.35), inset 0 0 18px rgba(255,0,0,0.14);
+  padding: 10px 14px;
+  white-space: pre;
+  text-shadow: 0 0 8px rgba(255,40,40,0.65);
+  letter-spacing: 0.3px;
+  opacity: 0; transform: translateY(-8px) scale(0.99);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+  pointer-events: none;
+}
+.neko-scan.show { opacity: 1; transform: none; }
+.neko-scan .hd { display: block; color: #ff2a2a; letter-spacing: 1px; margin: 2px 0; text-shadow: 0 0 10px rgba(255,40,40,0.9); }
+.neko-scan .k { color: #ff9a9a; }
+.neko-scan .v { color: #fff0f0; text-shadow: 0 0 10px rgba(255,90,90,0.95); }
+.neko-scan[hidden] { display: none; }
+
 /* окно чата — вверху по центру, поверх кода; сообщения ОСТАЮТСЯ */
 .neko-dialog {
   position: relative; z-index: 1;

@@ -464,6 +464,58 @@
     return hits;
   }
 
+  // Структурированное «досье» игрока для читаемой выкладки во время скана:
+  // имя, время, откуда зашёл (город по часовому поясу + источник), система и пр.
+  function getScanProfile() {
+    const rows = [];
+    const now = new Date();
+    const pad = (x) => String(x).padStart(2, "0");
+    const ua = navigator.userAgent || "";
+    let tz = ""; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch {}
+    const city = tz.includes("/") ? tz.split("/").pop().replace(/_/g, " ") : tz;
+    const region = tz.includes("/") ? tz.split("/")[0] : "";
+    const os = /Windows/.test(ua) ? "Windows" : /Macintosh|Mac OS/.test(ua) ? "macOS"
+             : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS"
+             : /Linux/.test(ua) ? "Linux" : "неизвестно";
+    const browser = /Edg/.test(ua) ? "Edge" : /OPR|Opera/.test(ua) ? "Opera"
+                  : /Firefox/.test(ua) ? "Firefox" : /Chrome|Chromium/.test(ua) ? "Chrome"
+                  : /Safari/.test(ua) ? "Safari" : "браузер";
+    let ref = ""; try { ref = document.referrer ? new URL(document.referrer).hostname : ""; } catch {}
+    rows.push(["имя", neko.knownName || "не назвал"]);
+    rows.push(["время", pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds())]);
+    rows.push(["откуда", (city ? city : "?") + (region ? " · " + region : "")]);
+    rows.push(["вход", ref ? ref : "напрямую"]);
+    rows.push(["система", os + " · " + browser]);
+    try { if (window.screen) rows.push(["экран", window.screen.width + "×" + window.screen.height]); } catch {}
+    const lang = navigator.language || ""; if (lang) rows.push(["язык", lang]);
+    if (navigator.hardwareConcurrency) rows.push(["ядра", String(navigator.hardwareConcurrency)]);
+    return rows;
+  }
+
+  // Панель-«досье», всплывающая на время скана поверх кода.
+  function ensureScanEl() {
+    let el = $("#neko-scan");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "neko-scan"; el.className = "neko-scan";
+      const host = $("#neko-intro") || document.body;
+      host.appendChild(el);
+    }
+    return el;
+  }
+  function showScanReadout(dur) {
+    const el = ensureScanEl();
+    const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const body = getScanProfile()
+      .map(([k, v]) => `<span class="k">${esc((k + ":").padEnd(9))}</span><span class="v">${esc(v)}</span>`)
+      .join("\n");
+    el.innerHTML = `<span class="hd">⟢ СКАНИРОВАНИЕ ОБЪЕКТА…</span>\n${body}\n<span class="hd">⟢ ИДЕНТИФИКАЦИЯ ЗАВЕРШЕНА</span>`;
+    el.classList.add("show");
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove("show"), dur);
+  }
+  function hideScanReadout() { const el = $("#neko-scan"); if (el) { clearTimeout(el._t); el.classList.remove("show"); } }
+
   function startCodeBackground(opacity = CODE_BG) {
     const code = $("#neko-code");
     if (!code) return;
@@ -541,16 +593,19 @@
     });
   }
 
-  // Скан: на короткое время поток ярче, чаще вспышки, в нём мелькают
-  // «найденные» данные о тебе. Будто «Некий» внезапно полез смотреть, кто ты.
-  let scanTimer = null;
-  function scanBurst(dur = 1100 + Math.random() * 1100) {
+  // Скан: ~5 секунд поток ярче и плотнее, в коде мелькают «найденные» данные,
+  // а поверх всплывает читаемое «досье» — имя, время, откуда зашёл и пр.
+  // Будто «Некий» внезапно полез смотреть, кто ты.
+  let scanTimer = null, scanEndTimer = null;
+  function scanBurst(dur = 5000) {
     if (!codeFX) return;                 // только поверх идущего фона
     codeScanHits = getScanHits();
     codeScanning = true;
-    codeFX.setOpacity(0.52);
+    codeFX.setOpacity(0.5);
     nekoTick();                          // короткий «бип» сканера
-    setTimeout(() => {
+    showScanReadout(dur);                // читаемая выкладка личных данных на dur мс
+    clearTimeout(scanEndTimer);
+    scanEndTimer = setTimeout(() => {
       codeScanning = false;
       codeScanHits = [];
       if (codeFX) codeFX.setOpacity(CODE_BG);
@@ -559,12 +614,18 @@
   // Планировщик случайных сканов, пока открыт экран диалога.
   function scheduleScan(first) {
     clearTimeout(scanTimer);
-    const delay = first ? (3000 + Math.random() * 6000)   // первый — через 3–9 с
-                        : (8000 + Math.random() * 17000);  // дальше — раз в 8–25 с
+    const delay = first ? (4000 + Math.random() * 6000)    // первый — через 4–10 с
+                        : (12000 + Math.random() * 16000);  // дальше — раз в 12–28 с
     scanTimer = setTimeout(() => { scanBurst(); scheduleScan(false); }, delay);
   }
   function startScanScheduler() { scheduleScan(true); }
-  function stopScanScheduler() { clearTimeout(scanTimer); scanTimer = null; codeScanning = false; codeScanHits = []; }
+  function stopScanScheduler() {
+    clearTimeout(scanTimer); clearTimeout(scanEndTimer); scanTimer = null;
+    codeScanning = false; codeScanHits = []; hideScanReadout();
+  }
+  // Скан по «моменту»: когда игрок спрашивает, видит ли его «Некий» / кто он.
+  const SCAN_TRIGGER_RE = /(что ты (обо мне |про меня )?знаешь|знаешь (обо мне|про меня)|кто я( так(ой|ая))?\b|ты меня (видишь|знаешь|слышишь|чувствуешь)|видишь (ли )?меня|ты (за мной )?следишь|следишь за мной|откуда ты (это |всё |все )?знаешь|ты меня запис|шпион|ты за мной (наблюда|смотр)|знаешь кто я|что тебе известно обо мне)/i;
+  function wantsScan(t) { return SCAN_TRIGGER_RE.test((t || "").toLowerCase()); }
 
   // печатает реплику «Некого» НОВЫМ сообщением в логе (старые остаются)
   function nekoType(text, hold = 850) {
@@ -935,6 +996,7 @@
       // «дальше», молчание или просьба об истории → выходим к катсцене.
       // Сам переход и атмосферную реплику-мост проигрывает runNekoIntro.
       if (!s || DONE_RE.test(s) || wantsWorldStory(s)) { storyRequested = true; return; }
+      if (wantsScan(s)) scanBurst();               // «момент»: спросил, видит ли он тебя → скан
       await nekoType(respondTo(s), 700);           // настоящий ответ на вопрос игрока
       if (classify(s) === "bye") { storyRequested = true; return; }  // попрощался — тоже к катсцене
     }
