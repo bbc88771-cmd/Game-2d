@@ -1018,40 +1018,212 @@
     }
   }
 
-  // Катсцена: анимированные кадры (зум/пан + угольки/туман/вспышки) + текст + звук;
-  // в конце экран затухает и открывается полноэкранный выбор персонажа.
+  // Катсцена: 4 нарративных слайда с озвучкой, текстовыми битами и Ken Burns;
+  // в конце экран затухает и управление возвращается вызывающей функции.
   async function cutscene() {
     const cs = $("#cutscene"), frame = $("#cut-frame"), cap = $("#cut-caption"),
       skip = $("#cut-skip"), flash = $("#cut-flash"), embers = $("#cut-embers");
     let skipped = false;
-    const onS = () => { skipped = true; };
+    const onS = () => { skipped = true; if (narration) { narration.pause(); narration.currentTime = 0; } };
     skip.addEventListener("click", onS);
     cs.hidden = false; cs.classList.remove("fade-out");
     spawnEmbers(embers);
-    const audio = startAmbient();
-    const frames = [
-      ["assets/img/background.jpg", "Мир, который ты знал, уже закончился.", 196, "kb"],
-      ["assets/img/loc_dead.svg", "Земля треснула и высохла. Вода ушла.", 165, "kb2"],
-      ["assets/img/loc_magic.svg", "Из трещин пришли души — и заняли всё живое.", 220, "kb"],
-      [null, "Осталось только это.\nИ ты.", 110, "kb2"],
+
+    // Озвучка — играет параллельно со слайдами
+    const narration = new Audio("assets/audio/intro-narration.mp3");
+    narration.volume = settings.music === 0 ? 0 : Math.max(0, Math.min(1, (settings.music ?? 70) / 100));
+    const narrationReady = new Promise((res) => {
+      narration.addEventListener("loadedmetadata", res, { once: true });
+      narration.addEventListener("error", res, { once: true });
+      setTimeout(res, 3000); // таймаут на случай, если аудио не загрузится
+    });
+
+    // Запускаем фоновый эмбиент на низкой громкости — не мешает озвучке
+    const ambientVolumeScale = 0.18;
+    const ambientOrig = startAmbient;
+    const ambient = (function () {
+      const ctx = (function () {
+        try {
+          const c = new (window.AudioContext || window.webkitAudioContext)();
+          if (c.state === "suspended") c.resume().catch(() => {});
+          return c;
+        } catch { return null; }
+      })();
+      if (!ctx) return null;
+      const master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+      const vol = Math.max(0, Math.min(1, (settings.music ?? 70) / 100)) * ambientVolumeScale;
+      const t0 = ctx.currentTime; master.gain.linearRampToValueAtTime(vol, t0 + 2.5);
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 380; lp.connect(master);
+      const o1 = ctx.createOscillator(); o1.type = "sawtooth"; o1.frequency.value = 55;
+      const o2 = ctx.createOscillator(); o2.type = "sine"; o2.frequency.value = 82.4;
+      const g1 = ctx.createGain(); g1.gain.value = 0.16; o1.connect(g1).connect(lp);
+      const g2 = ctx.createGain(); g2.gain.value = 0.12; o2.connect(g2).connect(lp);
+      [o1, o2].forEach((o) => o.start());
+      return { ctx, master, nodes: [o1, o2] };
+    })();
+
+    // Начинаем воспроизведение озвучки (не ждём полной загрузки — начинаем как можно быстрее)
+    narration.play().catch(() => {});
+
+    // Тексты слайдов разбиты на смысловые биты (предложения)
+    const SLIDES = [
+      {
+        img: "assets/img/background.jpg",
+        kb: "kb",
+        freq: 196,
+        neko: false,
+        beats: [
+          "Это был самый обычный день.",
+          "Тот самый, когда ничего не предвещает беды.",
+          "Где-то в городе смеются дети, кто-то ссорится на кухне, захлопывая дверь.",
+          "А под старым деревом в парке сидит девушка и тихо плачет, пряча лицо в ладонях.",
+          "Совсем рядом парень насвистывает дурацкую песенку, пиная пустую банку.",
+          "Самый обычный, живой, дышащий мир.",
+          "Ты стоишь на своём месте. Чувствуешь твёрдую землю под ногами.",
+          "Слышишь пение птиц и чьё-то радио из открытого окна.",
+          "Ничего не подозреваешь. Ничего не знаешь.",
+          "Но где-то глубоко под землёй… что-то очнулось.",
+        ],
+      },
+      {
+        img: "assets/img/loc_dead.svg",
+        kb: "kb2",
+        freq: 165,
+        neko: false,
+        beats: [
+          "Сначала это был просто толчок. Глухой, идущий из-под земли.",
+          "Стёкла дрогнули. Чашки зазвенели на столах.",
+          "Люди замерли, оглядываясь друг на друга — что это было?",
+          "Но звук не утих. Он нарастал, превращаясь в низкий, вибрирующий гул, от которого закладывало уши.",
+          "Земля под ногами перестала быть твёрдой. Она дышала.",
+          "Асфальт пошёл рябью. Первые трещины поползли во все стороны, словно чёрные молнии, разрывающие реальность.",
+          "И из этих трещин… хлынул свет. Яростный. Плотный. Обжигающий даже сквозь сомкнутые веки.",
+          "Казалось, сама планета вскрыла себе вены.",
+          "Ты чувствуешь, как что-то поднимается из этого света. Что-то древнее. Что-то, что не должно было проснуться.",
+          "И сейчас… произойдёт что-то страшное.",
+        ],
+      },
+      {
+        img: "assets/img/loc_magic.svg",
+        kb: "kb",
+        freq: 220,
+        neko: false,
+        beats: [
+          "Дома, которые ещё минуту назад были крепостями, ломались, как карточные домики.",
+          "Люди падали в слепящие бездны. Крики тонули в гуле.",
+          "Кто-то бежал — и земля уходила из-под ног.",
+          "А из света… они выползали. Словно огоньки надежды — или боли.",
+          "Они поднимались вверх, вселяясь в обломки, в острова, в то, что осталось от мира.",
+          "И меняли их. Искажали. Превращали в нечто чужое, опасное, враждебное.",
+          "Твой кусок асфальта с чахлым деревом и покосившимся фонарём плавно поплыл вверх.",
+          "Вокруг парили обломки, вырванные с корнем деревья.",
+          "Свет погас. Вспышка. Миг пустоты.",
+          "И вдруг — удар. Что-то огромное обрушилось на твой клочок земли, расколов его пополам.",
+          "Ты полетел вниз. Падал долго. Слишком долго. И очнулся здесь.",
+        ],
+      },
+      {
+        img: null,
+        kb: "kb2",
+        freq: 110,
+        neko: true,
+        beats: [
+          "Ты открываешь глаза. Тишина.",
+          "Бархатная чернота космоса вокруг.",
+          "Далеко-далеко, как острова в океане ночи, виднеются другие части суши.",
+          "На некоторых из них копошатся фигурки. Выжившие.",
+          "Ты, наверное, думаешь… откуда я всё это знаю?",
+          "Я не живой. И не мёртвый. Меня нет — но я есть.",
+          "Я видел тебя. Я видел, что произошло. Я почувствовал всех, кто поднялся в тот момент… но только ты услышал мой голос.",
+          "Это значит, что ты — особенный.",
+          "Те огоньки, что вырвались из света… они изменили острова. Они сделали их опасными. Если их не остановить — они продолжат нести хаос.",
+          "Вдруг… это они виноваты в том, что случилось?",
+          "Давай посмотрим на наш новый мир… Ты сам всё увидишь.",
+        ],
+      },
     ];
-    for (const [img, text, freq, kb] of frames) {
+
+    // Распределяем длительности слайдов пропорционально числу символов
+    const FALLBACK_DURATIONS = [14000, 22000, 22000, 26000]; // мс, если длительность аудио неизвестна
+    const slideCharCounts = SLIDES.map((s) => s.beats.reduce((acc, b) => acc + b.length, 0));
+    const totalChars = slideCharCounts.reduce((a, b) => a + b, 0);
+
+    await narrationReady;
+    const totalDuration = narration.duration && isFinite(narration.duration)
+      ? narration.duration * 1000
+      : FALLBACK_DURATIONS.reduce((a, b) => a + b, 0);
+
+    const slideDurations = slideCharCounts.map((c) => Math.max(8000, Math.round((c / totalChars) * totalDuration)));
+
+    // Показываем каждый слайд
+    for (let si = 0; si < SLIDES.length; si++) {
       if (skipped) break;
+      const slide = SLIDES[si];
+      const slideDur = slideDurations[si];
+
+      // Смена фона
       frame.style.opacity = "0";
-      await wait(skipped ? 0 : 320);                    // плавный переход между кадрами
-      frame.style.backgroundImage = img ? `url("${img}")` : "none";
-      frame.classList.remove("kb", "kb2"); void frame.offsetWidth; frame.classList.add(kb); // зум/пан
-      frame.style.opacity = img ? "1" : "0";
-      flash.classList.remove("go"); void flash.offsetWidth; flash.classList.add("go"); // вспышка на смене кадра
-      cap.textContent = text;
-      cap.classList.remove("show"); void cap.offsetWidth; cap.classList.add("show");
-      bell(audio, freq);
-      await wait(skipped ? 140 : 2700);
+      await wait(skipped ? 0 : 300);
+      if (skipped) break;
+
+      if (slide.img) {
+        frame.style.backgroundImage = `url("${slide.img}")`;
+        frame.style.background = "";
+        frame.style.opacity = "1";
+      } else {
+        // Слайд 4 — глубокий чёрный космос
+        frame.style.backgroundImage = "none";
+        frame.style.background = "#000";
+        frame.style.opacity = "1";
+      }
+      frame.classList.remove("kb", "kb2"); void frame.offsetWidth; frame.classList.add(slide.kb);
+
+      // Вспышка на смене кадра
+      flash.classList.remove("go"); void flash.offsetWidth; flash.classList.add("go");
+
+      // Колокол
+      if (ambient) bell(ambient, slide.freq);
+
+      // Устанавливаем стиль подписи
+      if (slide.neko) {
+        cap.classList.add("neko-voice");
+      } else {
+        cap.classList.remove("neko-voice");
+      }
+
+      // Показываем биты подписей поочерёдно
+      const beats = slide.beats;
+      const beatDur = Math.max(3500, Math.floor(slideDur / beats.length));
+
+      for (let bi = 0; bi < beats.length; bi++) {
+        if (skipped) break;
+        cap.textContent = beats[bi];
+        cap.classList.remove("show"); void cap.offsetWidth; cap.classList.add("show");
+        await wait(skipped ? 0 : beatDur);
+        // Плавно убираем текст перед следующим битом (кроме последнего — его уберёт смена слайда)
+        if (bi < beats.length - 1 && !skipped) {
+          cap.classList.remove("show");
+          await wait(skipped ? 0 : 400);
+        }
+      }
+
+      // После последнего бита слайда — пауза перед следующим слайдом
+      if (!skipped && si < SLIDES.length - 1) {
+        cap.classList.remove("show");
+        await wait(600);
+      }
     }
+
+    // Завершение: убираем подпись и затухаем
     cap.classList.remove("show");
-    cs.classList.add("fade-out");                       // затухание всего экрана
+    cap.classList.remove("neko-voice");
+    await wait(skipped ? 0 : 600);
+    cs.classList.add("fade-out");
     await wait(900);
-    stopAmbient(audio);
+
+    // Останавливаем аудио и эмбиент
+    try { narration.pause(); narration.currentTime = 0; } catch {}
+    if (ambient) stopAmbient(ambient);
     embers.innerHTML = "";
     skip.removeEventListener("click", onS);
     cs.hidden = true; cs.classList.remove("fade-out");
@@ -1201,6 +1373,19 @@
 
     renderPlayers(); renderDifficulty(); renderMods();
     scheduleJoins();
+
+    // Привязка чата
+    const chatInput = scr.querySelector("#lobbyChatInput");
+    const chatSend = scr.querySelector("#lobbyChatSend");
+    const sendChatMsg = () => {
+      const text = (chatInput.value || "").trim();
+      if (!text) return;
+      lobbyChatAdd(playerName || "Вы", text, "self");
+      chatInput.value = "";
+      chatInput.focus();
+    };
+    chatSend.addEventListener("click", sendChatMsg);
+    chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendChatMsg(); } });
   }
 
   function lobbyHTML(mode, code) {
@@ -1218,6 +1403,17 @@
             <h2>Игроки <span class="muted" id="pcount"></span></h2>
             <div class="players-grid" id="players"></div>
             <p class="neko-whisper" id="nekoWhisper" hidden></p>
+          </section>
+          <section class="lobby-sec">
+            <h2>Чат</h2>
+            <div class="lobby-chat-wrap">
+              <div class="lobby-chat-log" id="lobbyChatLog" aria-live="polite"></div>
+              <div class="lobby-chat-input-row">
+                <input class="lobby-chat-input" id="lobbyChatInput" type="text" maxlength="120"
+                       placeholder="Написать в чат…" autocomplete="off" spellcheck="false" />
+                <button class="lobby-chat-send" id="lobbyChatSend" aria-label="Отправить">▸</button>
+              </div>
+            </div>
           </section>
           <section class="lobby-sec">
             <h2>Сложность</h2>
@@ -1254,6 +1450,21 @@
     </div>`;
   }
 
+  // Добавляет сообщение в чат лобби.
+  // kind: "self" | "other" | "neko"
+  function lobbyChatAdd(name, text, kind) {
+    const log = document.getElementById("lobbyChatLog"); if (!log) return;
+    const msg = document.createElement("div");
+    msg.className = "lc-msg lc-" + kind;
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "lc-name";
+    nameSpan.textContent = (kind === "neko" ? "Некий" : name) + ":";
+    msg.appendChild(nameSpan);
+    msg.appendChild(document.createTextNode(" " + text));
+    log.appendChild(msg);
+    log.scrollTop = log.scrollHeight;
+  }
+
   function renderPlayers() {
     const grid = document.getElementById("players"); if (!grid) return;
     let html = "";
@@ -1276,22 +1487,53 @@
   }
 
   function showWhisper(text) {
-    const el = document.getElementById("nekoWhisper"); if (!el) return;
-    el.textContent = text; el.hidden = false;
-    el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+    // Показываем в старом элементе (совместимость) и в новом чат-логе
+    const el = document.getElementById("nekoWhisper");
+    if (el) { el.textContent = text; el.hidden = false; el.classList.remove("show"); void el.offsetWidth; el.classList.add("show"); }
+    lobbyChatAdd("Некий", text, "neko");
   }
+  // Фразы болтовни игроков при входе и ожидании
+  const PLAYER_GREETS = [
+    "Всем привет, готов к приключениям!",
+    "Наконец-то нашёл лобби, жду старта.",
+    "Привет всем! Долго добирался.",
+    "О, уже есть народ. Хорошо.",
+    "Здарова! Давно вас ждёте?",
+  ];
+  const PLAYER_IDLES = [
+    ["Кто-нибудь знает, что нас там ждёт?", "Первый раз играю вместе — интересно."],
+    ["Надеюсь, хост не слишком долго тянет.", "Лишь бы интернет не лёг в самый момент."],
+    ["Говорят, на сложных уровнях боссы жуть как злые.", "Ну что, готовы умирать вместе?"],
+    ["Мне нравится этот интерфейс. Атмосферно.", "Тут ещё какой-то «Некий» есть, слышали?"],
+    ["Лишь бы хватило ресурсов на всех.", "Кто будет танковать, кстати?"],
+  ];
+
   function scheduleJoins() {
     const pool = ["Странник", "Кузнец", "Следопыт", "Жрица", "Вард"];
     const me = neko.knownName || "Ты";
     const step = () => {
       if (!lobby || !lobbyEl().classList.contains("is-active")) return;
       if (lobby.players.length >= MAX_PLAYERS) return;
-      const joined = { name: pool[lobby.players.length - 1] || "Игрок", host: false };
+      const idx = lobby.players.length - 1;
+      const joined = { name: pool[idx] || "Игрок", host: false };
       lobby.players.push(joined);
       renderPlayers();
+      // Вступительная реплика нового игрока в чат
+      lobbyChatAdd(joined.name, PLAYER_GREETS[idx % PLAYER_GREETS.length], "other");
+
       // «Некий» реагирует: общая реплика на первого друга, затем личные шёпоты
       if (lobby.players.length === 2) showWhisper(pick(MP_LOBBY));
       else showWhisper(pick(MP_WHISPERS).replace("{a}", me).replace("{b}", joined.name));
+
+      // Задерживаем ещё одну реплику болтовни от присоединившегося игрока
+      const idleLines = PLAYER_IDLES[idx % PLAYER_IDLES.length];
+      const idleLine = idleLines[Math.floor(Math.random() * idleLines.length)];
+      setTimeout(() => {
+        if (lobby && lobbyEl().classList.contains("is-active")) {
+          lobbyChatAdd(joined.name, idleLine, "other");
+        }
+      }, 2500 + Math.random() * 2000);
+
       lobby.joinTimer = setTimeout(step, 1800 + Math.random() * 2400);
     };
     lobby.joinTimer = setTimeout(step, 1800);
