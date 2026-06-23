@@ -31,18 +31,30 @@ html, body {
    привязка к левому-верхнему углу: логотип и панель всегда видны,
    обрезается только дальняя часть леса справа/снизу */
 #menu-screen {
-  background: #0a0806 url("../assets/img/background.jpg") left top / cover no-repeat;
+  background: #0a0806 url("../assets/img/menu_bg.jpg") left top / cover no-repeat;
   overflow: hidden;
 }
 
 /* слой интерфейса поверх всего экрана — кнопки никогда не обрезаются */
 #menu-stage { position: absolute; inset: 0; }
-#menu-stage::before {            /* мягкое затемнение слева для читаемости */
+#menu-stage::before {            /* затемнение слева для читаемости логотипа и кнопок */
   content: "";
   position: absolute; inset: 0;
   background: linear-gradient(90deg,
-    rgba(8,6,4,0.55) 0%, rgba(8,6,4,0.34) 16%, rgba(8,6,4,0.12) 32%, transparent 46%);
+    rgba(8,6,4,0.86) 0%, rgba(8,6,4,0.66) 18%, rgba(8,6,4,0.32) 34%, rgba(8,6,4,0.08) 48%, transparent 62%);
   pointer-events: none;
+}
+
+/* логотип игры — слева сверху (вырезан из старого арта, фон прозрачный) */
+.menu-logo {
+  position: absolute;
+  left: clamp(12px, 3vw, 32px);
+  top: clamp(12px, 3.2vh, 28px);
+  width: clamp(190px, 23vw, 312px);
+  height: auto;
+  z-index: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,0.65));
 }
 
 /* список кнопок — слева, по центру по вертикали, всегда целиком в кадре */
