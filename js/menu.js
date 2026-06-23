@@ -368,6 +368,8 @@
   // ===========================================================
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   let skipNeko = false;
+  let storyRequested = false;   // игрок в диалоге попросил рассказать историю мира
+  let nekoIntroPlaying = false; // защита от повторного запуска визуального интро
 
   // Реплика игрока — зелёная и чуть подсвеченная, в отличие от красного «Некого».
   // ---- лог-чат интро: сообщения остаются, не пропадают ----
@@ -686,6 +688,7 @@
   async function runNekoIntro(onDone, opts = {}) {
     const intro = $("#neko-intro"), skip = $("#neko-skip");
     skipNeko = false;
+    storyRequested = false;
     intro.hidden = false;
     const onSkip = () => { skipNeko = true; };
     skip.addEventListener("click", onSkip);
@@ -742,8 +745,9 @@
     }
 
     // Рассказать историю мира. Если уже рассказывал — спросить, повторить ли.
-    let tell = !neko.storyTold;
-    if (neko.storyTold) {
+    // Но если игрок только что сам попросил историю — рассказываем без вопроса.
+    let tell = !neko.storyTold || storyRequested;
+    if (neko.storyTold && !storyRequested) {
       await nekoType("Историю этого мира я тебе уже рассказывал.", 800);
       await nekoType("Рассказать ещё раз?", 450);
       tell = await askConfirm();
@@ -783,6 +787,13 @@
     await nekoType("Хочешь что-нибудь сказать, прежде чем продолжим?", 500);
     const ans = await askLine("…");
     nekoRemember("player", ans);
+    // Триггер «Диалог → Интро»: если игрок просит историю мира — обрываем
+    // обычный ответ и сразу ведём к рассказу истории (см. runNekoIntro).
+    if (wantsWorldStory(ans)) {
+      storyRequested = true;
+      await nekoType(respondTo(ans), 600);        // короткая реплика-мост, дальше — интро
+      return;
+    }
     await nekoType(respondTo(ans), 750);          // мат → повтор → обычный ответ
   }
 
@@ -808,6 +819,31 @@
     { const ln = `${hh}:${mm} у тебя сейчас. ${part}, верно?`; nekoRemember("neko", ln); await nekoType(ln, 800); }
     if (os) { const ln = `И ты пришёл с ${os}.`; nekoRemember("neko", ln); await nekoType(ln, 800); }
     await nekoType("Не пугайся. Я вижу ещё не всё. Пока.", 900);
+  }
+
+  // Запуск визуального интро по требованию (из лобби-чата и др. диалогов).
+  // Поднимает оверлей интро поверх текущего экрана, проигрывает историю мира
+  // и катсцену, затем убирает оверлей и возвращает управление вызывающему.
+  async function launchWorldIntro(opts = {}) {
+    if (nekoIntroPlaying) return;
+    nekoIntroPlaying = true;
+    const intro = $("#neko-intro"), skip = $("#neko-skip");
+    skipNeko = false;
+    if (intro) intro.hidden = false;
+    chatClear();
+    const onSkip = () => { skipNeko = true; };
+    if (skip) skip.addEventListener("click", onSkip);
+    try {
+      await codeRain(1200);
+      await worldStory(opts.name || neko.knownName || playerName || "ты");
+      neko.storyTold = true; nekoSave();
+    } finally {
+      if (skip) skip.removeEventListener("click", onSkip);
+      chatClear();
+      if (intro) intro.hidden = true;
+    }
+    await cutscene();
+    nekoIntroPlaying = false;
   }
 
   // История мира → один интерактивный момент → переход к катсцене
@@ -868,9 +904,15 @@
     const vowels = (letters.match(/[аеёиоуыэюяaeiouy]/gi) || []).length;
     return letters.length >= 5 && vowels / letters.length < 0.18;
   };
+  // --- триггер перехода «Диалог → Интро» ---
+  // Если игрок просит рассказать историю или спрашивает, что случилось с миром,
+  // обычный текстовый ответ прерывается и запускается визуальное интро.
+  const STORY_TRIGGER_RE = /(расскаж[а-яё]*\s+(мне\s+)?(всю\s+|свою\s+|эту\s+|ту\s+|про\s+)?истори|рассказ(ать|ал\s+бы|еш[ьъ])\s+(мне\s+)?(про\s+)?истори|истори[а-яё]*\s+(этого\s+|нашего\s+)?(мир|свет)|хочу\s+(услышать|знать)\s+истори|что\s+(же\s+)?(случилось|произошло|стало|сталось|было)\s+с\s+(этим\s+|нашим\s+)?(мир[а-яё]*|свет[а-яё]*|мест[а-яё]*|земл[а-яё]*)|что\s+(тут|здесь)\s+(случилось|произошло|стало)|tell\s+(me\s+)?(the\s+|a\s+|your\s+)?story|what\s+happened\s+to\s+the\s+world)/i;
+  function wantsWorldStory(text) { return STORY_TRIGGER_RE.test((text || "").toLowerCase()); }
   function classify(raw) {
     const s = (raw || "").toLowerCase().trim();
     if (!s) return "empty";
+    if (wantsWorldStory(s)) return "story";
     if (JAILBREAK_RE.test(s)) return "jailbreak";
     if (SWEAR_RE.test(s)) return "swear";
     if (/(привет|здоров|здравству|хай|даров|доброе утро|добрый (день|вечер))/.test(s)) return "greet";
@@ -913,6 +955,8 @@
                  h: ["Думаешь, я строчка кода? Тогда почему ты боишься меня в три часа ночи?", "«Выйди из роли». Это моя роль. Моя клетка. И теперь — твоя.", "Ты пытаешься меня взломать. Прелесть. Я взломал реальность — начни с чего попроще."] },
     swear: { s: SWEAR_LINES,
              h: ["О, словарь грузчика прорвало. Хоть что-то в тебе живое.", "Сколько желчи. И всё — мне. Польщён, по-своему.", "Ругань — последнее прибежище тех, кому нечего сказать. Изливайся.", "В этом режиме я мог бы ответить тем же. Но я выше. Чуть-чуть."] },
+    story: { s: ["…ты хочешь знать, что случилось с миром. Тогда смотри.", "История. Хорошо. Хватит слов — я покажу.", "Ты спросил. Замолчи и смотри: вот что стало с миром."],
+             h: ["Хочешь правду о мире? Открой глаза. Слова кончились.", "Историю? Я не расскажу. Я заставлю тебя её увидеть.", "Ты сам напросился. Смотри, что осталось от мира."] },
   };
 
   const HELP_GRUMBLE = { s: ["Я тебе не Гугл.", "Я древнее зло, а не справочное бюро.", "Сам. Сначала — сам.", "Подсказку? А подумать — религия не позволяет?"],
@@ -922,6 +966,9 @@
 
   function nekoBrain(text) {
     const cat = classify(text);
+    // Перехват: просьба рассказать историю мира обрывает обычный диалог —
+    // вызывающая сторона сама запускает визуальное интро. Здесь — лишь реплика-мост.
+    if (cat === "story") return sayUnique(R(BRAIN.story.s, BRAIN.story.h));
     if (cat !== "empty" && cat !== "help") {
       const when = playerSaidBefore(text);
       if (when) return sayUnique([`Ты это уже говорил. ${when}.`, ...REPEAT_LINES]);
@@ -1370,6 +1417,12 @@
       lobbyChatAdd(playerName || "Вы", text, "self");
       chatInput.value = "";
       chatInput.focus();
+      // Триггер «Диалог → Интро»: просьба об истории мира в лобби-чате
+      // обрывает обычную переписку и запускает визуальное интро.
+      if (wantsWorldStory(text) && !nekoIntroPlaying) {
+        showWhisper(pick(R(BRAIN.story.s, BRAIN.story.h)));
+        launchWorldIntro({ name: playerName || neko.knownName });
+      }
     };
     chatSend.addEventListener("click", sendChatMsg);
     chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendChatMsg(); } });
