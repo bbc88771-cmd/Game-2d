@@ -1039,28 +1039,15 @@
     });
 
     // Запускаем фоновый эмбиент на низкой громкости — не мешает озвучке
-    const ambientVolumeScale = 0.18;
-    const ambientOrig = startAmbient;
-    const ambient = (function () {
-      const ctx = (function () {
-        try {
-          const c = new (window.AudioContext || window.webkitAudioContext)();
-          if (c.state === "suspended") c.resume().catch(() => {});
-          return c;
-        } catch { return null; }
-      })();
-      if (!ctx) return null;
-      const master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
-      const vol = Math.max(0, Math.min(1, (settings.music ?? 70) / 100)) * ambientVolumeScale;
-      const t0 = ctx.currentTime; master.gain.linearRampToValueAtTime(vol, t0 + 2.5);
-      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 380; lp.connect(master);
-      const o1 = ctx.createOscillator(); o1.type = "sawtooth"; o1.frequency.value = 55;
-      const o2 = ctx.createOscillator(); o2.type = "sine"; o2.frequency.value = 82.4;
-      const g1 = ctx.createGain(); g1.gain.value = 0.16; o1.connect(g1).connect(lp);
-      const g2 = ctx.createGain(); g2.gain.value = 0.12; o2.connect(g2).connect(lp);
-      [o1, o2].forEach((o) => o.start());
-      return { ctx, master, nodes: [o1, o2] };
-    })();
+    const ambient = startAmbient();
+    // Притушаем до ~36% от нормальной громкости, чтобы не перебивать озвучку
+    if (ambient) {
+      const t0 = ambient.ctx.currentTime;
+      ambient.master.gain.cancelScheduledValues(t0);
+      ambient.master.gain.setValueAtTime(0, t0);
+      const lowVol = Math.max(0, Math.min(1, (settings.music ?? 70) / 100)) * 0.18;
+      ambient.master.gain.linearRampToValueAtTime(lowVol, t0 + 2.5);
+    }
 
     // Начинаем воспроизведение озвучки (не ждём полной загрузки — начинаем как можно быстрее)
     narration.play().catch(() => {});
