@@ -744,21 +744,14 @@
       await nekoType("Теперь, когда вы готовы… слушай внимательно.", 800);
     }
 
-    // Рассказать историю мира. Если уже рассказывал — спросить, повторить ли.
-    // Но если игрок только что сам попросил историю — рассказываем без вопроса.
-    let tell = !neko.storyTold || storyRequested;
-    if (neko.storyTold && !storyRequested) {
-      await nekoType("Историю этого мира я тебе уже рассказывал.", 800);
-      await nekoType("Рассказать ещё раз?", 450);
-      tell = await askConfirm();
-      await nekoType(tell ? "Хорошо. Слушай снова." : "Как знаешь. Идём дальше.", 650);
-    }
-
+    // Историю мира показывает ТОЛЬКО катсцена. После диалога/«дальше»
+    // (storyRequested), для нового игрока или старта из лобби — сразу к ней.
+    const tell = !neko.storyTold || storyRequested || opts.storyOnly;
     if (tell) {
-      await worldStory(neko.knownName);         // рассказ истории мира (с диалогом)
-      neko.storyTold = true; nekoSave();
+      await nekoBridgeToCutscene();             // атмосферный мост (стиль Рика) перед катсценой
       finish();
-      await cutscene();                         // плавно перетекает в катсцену
+      neko.storyTold = true; nekoSave();
+      await cutscene();                         // история — только в катсцене
     } else {
       finish();
     }
@@ -793,25 +786,44 @@
   // молчит, пишет «дальше», прощается — или просит историю мира (тогда
   // срабатывает триггер перехода «Диалог → Интро»).
   async function nekoConverse(maxTurns = 12) {
-    const DONE_RE = /^(дальше|продолж|поехали|ид[её]м|пошли|погнали|впер[её]д|готов|хватит|начн[её]м|начинаем|играть|давай начн|давай дальше|ладно дальше)/i;
+    const DONE_RE = /^(дальше|продолж|поехали|ид[её]м|пошли|погнали|впер[её]д|готов|хватит|начн[её]м|начинаем|играть|давай начн|давай дальше|ладно дальше|го\b|поехали)/i;
     for (let turn = 0; turn < maxTurns; turn++) {
-      const ans = await askLine(turn === 0 ? "спроси меня…" : "спроси ещё или напиши «дальше»…");
+      const ans = await askLine(turn === 0 ? "спроси меня… или напиши «дальше»" : "спроси ещё или напиши «дальше»…");
       nekoRemember("player", ans);
       const s = (ans || "").trim();
-      // Триггер «Диалог → Интро»: просьба об истории мира обрывает диалог.
-      if (wantsWorldStory(s)) {
-        storyRequested = true;
-        await nekoType(respondTo(s), 600);         // короткая реплика-мост, дальше — интро
-        return;
-      }
-      if (!s || DONE_RE.test(s)) {
-        await nekoType(s ? "Хорошо. Идём дальше." : "Молчишь. Хорошо. Идём дальше.", 500);
-        return;
-      }
+      // «дальше», молчание или просьба об истории → выходим к катсцене.
+      // Сам переход и атмосферную реплику-мост проигрывает runNekoIntro.
+      if (!s || DONE_RE.test(s) || wantsWorldStory(s)) { storyRequested = true; return; }
       await nekoType(respondTo(s), 700);           // настоящий ответ на вопрос игрока
-      if (classify(s) === "bye") return;           // попрощался — выходим из диалога
+      if (classify(s) === "bye") { storyRequested = true; return; }  // попрощался — тоже к катсцене
     }
-    await nekoType("Достаточно слов. Идём — покажу остальное.", 650);
+    storyRequested = true;                          // наговорился — пора показывать
+  }
+
+  // Атмосферная реплика-мост перед катсценой. Стиль Рика из «Рика и Морти»:
+  // цинично, умно, местами с приколом. Иногда «Некий» печатает жуткую фразу
+  // про игрока, стирает её и выдаёт обычный текст (приём nekoTypeErase).
+  const NEKO_CREEPY_ERASE = [
+    ["Я вижу тебя сквозь экран. Ты только что чуть подался вперёд.", "…ладно, забудь. Смотри."],
+    ["За твоей спиной секунду назад кто-то прош", "…нет. Показалось. Наверное. Идём."],
+    ["Ты ведь не один в комнате, да? Вон, в углу…", "…неважно. Не отвлекайся."],
+    ["Я знаю, когда ты в последний раз спал. Это нездорово, {n}.", "…впрочем, не моё дело. Поехали."],
+    ["Ты кончишь здесь так же, как и в прош", "…не-не, не буду спойлерить. Сюрприз сам себя не испортит."],
+    ["Слышишь это дыхание? Это не твоё.", "…шучу. Или нет. Смотри уже."],
+  ];
+  const NEKO_TO_CUTSCENE = [
+    "Ладно, *burp*… хватит слов. Слова — костыли для тех, кто боится смотреть. Гляди.",
+    "Рассказать? Не-е. Сказки рассказывают детям. Тебе я ПОКАЖУ, {n}.",
+    "Сейчас будет красиво. И страшно. В основном страшно. Не моргай.",
+    "История мира в двух словах: всё было — и сплыло. А теперь в деталях. Смотри.",
+    "Я бы пересказал, но у меня вечность дел и ни одной руки. Врубаю картинку.",
+    "Спойлер: мир сдох. Подробности — сейчас. Попкорн не предлагаю, его тут тоже нет.",
+    "Закрой рот, открой глаза, {n}. Сейчас ты увидишь, с чего всё началось.",
+  ];
+  async function nekoBridgeToCutscene() {
+    const name = neko.knownName || "ты";
+    if (Math.random() < 0.45) await nekoTypeErase(pick(NEKO_CREEPY_ERASE).map((l) => l.replace(/\{n\}/g, name)));
+    await nekoType(pick(NEKO_TO_CUTSCENE).replace(/\{n\}/g, name), 700);
   }
 
   // «Я тебя вижу» — веб-безопасный штрих в духе «узнаю тебя через систему».
@@ -839,63 +851,17 @@
   }
 
   // Запуск визуального интро по требованию (из лобби-чата и др. диалогов).
-  // Поднимает оверлей интро поверх текущего экрана, проигрывает историю мира
-  // и катсцену, затем убирает оверлей и возвращает управление вызывающему.
+  // Историю мира показывает ТОЛЬКО катсцена — текстового пересказа нет.
   async function launchWorldIntro(opts = {}) {
     if (nekoIntroPlaying) return;
     nekoIntroPlaying = true;
-    const intro = $("#neko-intro"), skip = $("#neko-skip");
     skipNeko = false;
-    if (intro) intro.hidden = false;
-    chatClear();
-    const onSkip = () => { skipNeko = true; };
-    if (skip) skip.addEventListener("click", onSkip);
+    neko.storyTold = true; nekoSave();
     try {
-      await codeRain(1200);
-      await worldStory(opts.name || neko.knownName || playerName || "ты");
-      neko.storyTold = true; nekoSave();
+      await cutscene();                         // история — только в катсцене
     } finally {
-      if (skip) skip.removeEventListener("click", onSkip);
-      chatClear();
-      if (intro) intro.hidden = true;
+      nekoIntroPlaying = false;
     }
-    await cutscene();
-    nekoIntroPlaying = false;
-  }
-
-  // История мира → один интерактивный момент → переход к катсцене
-  async function worldStory(name) {
-    // на сложных уровнях — честное предупреждение, что он может лгать
-    if (settings.difficulty === "hard" || settings.difficulty === "nightmare") {
-      await nekoType(pick(HARD_META), 950);
-    }
-    // печать-стирание: он почти признаётся, ЗАЧЕМ это делает — и осекается
-    await nekoTypeErase(TYPE_ERASE.nature);
-    const lines = [
-      `Тогда слушай, ${name}.`,
-      "Это был обычный мир. Средневековье. Камень, железо, молитвы.",
-      "Пока глубоко под землёй не проснулось… Нечто. Оно копило силы тысячи лет.",
-      "Пошли трещины. Из них вышли души — и вошли в острова, в зверей, в людей.",
-      "Мутация. Безумие. Землю разорвало на куски, и они повисли в пустоте.",
-      "Вода ушла почти отовсюду. Её теперь добывают по капле.",
-    ];
-    for (const l of lines) { await nekoType(l, 850); nekoRemember("neko", l); }
-    await nekoType("Ты помнишь, что было до катаклизма?", 500);
-    const ans = await askLine();
-    nekoRemember("player", ans);
-    const sw = nekoSwear(ans);
-    if (sw) await nekoType(sw, 700);
-    await nekoType(nekoReactMemory(ans), 800);
-    await nekoType("Память — единственное, что я могу… поправить.", 900);
-    await nekoType(`Идём, ${name}. Я покажу, что осталось.`, 800);
-  }
-
-  function nekoReactMemory(ans) {
-    const s = (ans || "").toLowerCase();
-    if (/(да|помн|конечно|ага)/.test(s)) return "Лжёшь. Никто не помнит. Это часть условия.";
-    if (/(нет|не\b|никак)/.test(s)) return "Хорошо. Чистый лист удобнее. И тебе, и мне.";
-    if (!s.trim()) return "Молчишь. Молчание я тоже запоминаю.";
-    return "…Любопытный ответ. Я его запомню.";
   }
 
   // Простой ответчик «Некого» на свободные сообщения игрока
