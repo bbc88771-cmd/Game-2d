@@ -399,33 +399,78 @@
   function playerEcho() {}
   function clearPlayerEcho() {}
 
-  function makeCode(lines) {
-    const ch = "01xX#@/\\|<>[]{}()=+*-ABCDEF0123456789░▒▓§∆ΣλØ";
-    const rnd = (n) => Array.from({ length: n }, () => ch[Math.floor(Math.random() * ch.length)]).join("");
-    const seg = () => ["0x" + rnd(4), "INIT", "soul.bind(" + rnd(3) + ")", "who_are_you",
-      "0b" + rnd(6), "trace[" + rnd(2) + "]", "rift.open()", "mem.scan", "::" + rnd(5),
-      "echo(" + rnd(3) + ")", "WAKE", "bind(" + rnd(2) + ")"][Math.floor(Math.random() * 12)];
-    const out = [];
-    for (let i = 0; i < lines; i++) {
-      let line = "";
-      while (line.length < 78) line += seg() + "  ";
-      out.push(line);
-    }
-    return out.join("\n");
+  // Одна строка «кода» нужной ширины (в символах), собранная из сегментов.
+  const CODE_CH = "01xX#@/\\|<>[]{}()=+*-ABCDEF0123456789░▒▓§∆ΣλØ¤µ¬‡†";
+  function codeRnd(n) { let s = ""; for (let i = 0; i < n; i++) s += CODE_CH[(Math.random() * CODE_CH.length) | 0]; return s; }
+  const CODE_SEGS = () => ["0x" + codeRnd(4), "INIT", "soul.bind(" + codeRnd(3) + ")", "who_are_you",
+    "0b" + codeRnd(6), "trace[" + codeRnd(2) + "]", "rift.open()", "mem.scan", "::" + codeRnd(5),
+    "echo(" + codeRnd(3) + ")", "WAKE", "bind(" + codeRnd(2) + ")", "scan(" + codeRnd(3) + ")",
+    "find:" + codeRnd(4), "soul[" + codeRnd(2) + "]", "??", "0x" + codeRnd(6), "purge", "seek()"][(Math.random() * 19) | 0];
+  function makeCodeLine(width) {
+    let line = "";
+    while (line.length < width) line += CODE_SEGS() + "  ";
+    return line.slice(0, width);
   }
 
+  // Реальные размеры глифа моноширинного шрифта (через скрытый зонд) —
+  // чтобы точно рассчитать число строк/столбцов под любой экран и шрифт.
+  function measureGlyph(refEl) {
+    const cs = getComputedStyle(refEl);
+    const probe = document.createElement("pre");
+    probe.style.cssText = "position:absolute;visibility:hidden;left:-99999px;top:0;margin:0;padding:0;white-space:pre;";
+    probe.style.fontFamily = cs.fontFamily;
+    probe.style.fontSize = cs.fontSize;
+    probe.style.fontWeight = cs.fontWeight;
+    probe.style.lineHeight = cs.lineHeight;
+    probe.style.letterSpacing = cs.letterSpacing;
+    const N = 20, W = 50;
+    probe.textContent = Array.from({ length: N }, () => "M".repeat(W)).join("\n");
+    document.body.appendChild(probe);
+    const r = probe.getBoundingClientRect();
+    document.body.removeChild(probe);
+    return { lineH: (r.height / N) || 14, charW: (r.width / W) || 8 };
+  }
+
+  // Полноэкранный «красный код»: плотный поток данных, который очень быстро
+  // перематывается и в случайных местах резко вспыхивает «найденными»
+  // фрагментами — эффект лихорадочного поиска информации. Покрывает весь экран.
   function codeRain(dur) {
     return new Promise((resolve) => {
       const code = $("#neko-code");
-      code.textContent = makeCode(80);
-      code.classList.remove("run"); void code.offsetWidth; code.classList.add("run");
+      if (!code) { resolve(); return; }
+      const g = measureGlyph(code);
+      const cols = Math.ceil(window.innerWidth / g.charW) + 4;
+      const rows = Math.ceil(window.innerHeight / g.lineH) + 4;
+      let lines = Array.from({ length: rows }, () => makeCodeLine(cols));
+      code.classList.add("run");
       const start = Date.now();
-      const tick = () => {
+      let raf = 0, last = 0;
+      const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const frame = (t) => {
         if (skipNeko || Date.now() - start >= dur) {
-          code.classList.remove("run"); code.textContent = ""; resolve();
-        } else setTimeout(tick, 80);
+          cancelAnimationFrame(raf);
+          code.classList.remove("run"); code.innerHTML = ""; resolve(); return;
+        }
+        if (t - last >= 28) {                            // ~30 кадров/с — очень быстрый скролл
+          last = t;
+          const shift = 2 + ((Math.random() * 4) | 0);   // сдвиг на 2–5 строк за кадр
+          for (let i = 0; i < shift; i++) { lines.shift(); lines.push(makeCodeLine(cols)); }
+          const html = new Array(lines.length);
+          for (let i = 0; i < lines.length; i++) {
+            const ln = lines[i];
+            if (Math.random() < 0.07) {                  // резкая «вспышка» в случайном месте строки
+              const x = (Math.random() * ln.length * 0.7) | 0;
+              const w = 6 + ((Math.random() * 20) | 0);
+              html[i] = esc(ln.slice(0, x)) + "<b>" + esc(ln.slice(x, x + w)) + "</b>" + esc(ln.slice(x + w));
+            } else {
+              html[i] = esc(ln);
+            }
+          }
+          code.innerHTML = html.join("\n");
+        }
+        raf = requestAnimationFrame(frame);
       };
-      setTimeout(tick, 80);
+      raf = requestAnimationFrame(frame);
     });
   }
 

@@ -284,25 +284,29 @@ html, body {
 }
 .neko-intro[hidden] { display: none; }
 
-/* код — НА ВЕСЬ ЭКРАН, ПОЗАДИ текста, быстрый «скан»-скролл */
+/* код — НА ВЕСЬ ЭКРАН, ПОЗАДИ текста; покадровый скролл и вспышки задаёт JS */
 .neko-code {
-  position: fixed; left: 0; right: 0; top: -10%; bottom: -10%; margin: 0; z-index: 0;
+  position: fixed; inset: 0; margin: 0; z-index: 0;
   font-family: "DejaVu Sans Mono", ui-monospace, monospace;
-  font-size: clamp(11px, 1.7vh, 16px);
-  line-height: 1.45;
-  color: #ff2e2e;
-  text-shadow: 0 0 8px rgba(255,30,30,0.55);
+  font-size: clamp(10px, 1.5vh, 14px);
+  line-height: 1.18;
+  letter-spacing: 0.5px;
+  color: #ff2424;
+  text-shadow: 0 0 7px rgba(255,28,28,0.55);
   white-space: pre; overflow: hidden;
-  padding: 0 3vw;
+  padding: 0; margin: 0;
   opacity: 0;
   pointer-events: none;
+  will-change: contents;
 }
-.neko-code.run { animation: neko-code-scan 1.8s linear forwards; }
-@keyframes neko-code-scan {
-  0% { opacity: 0; transform: translateY(10%); }
-  10% { opacity: 0.5; }
-  85% { opacity: 0.5; }
-  100% { opacity: 0; transform: translateY(-85%); }
+/* резко появляется (не плавно), пока идёт «сканирование» */
+.neko-code.run { opacity: 0.6; }
+/* «найденные» фрагменты — ярче и с сильным свечением, словно подсветка совпадения */
+.neko-code b {
+  font-weight: 400;
+  color: #fff3f3;
+  background: rgba(255,40,40,0.28);
+  text-shadow: 0 0 10px rgba(255,80,80,0.95), 0 0 18px rgba(255,40,40,0.7);
 }
 
 /* окно чата — вверху по центру, поверх кода; сообщения ОСТАЮТСЯ */
