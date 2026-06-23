@@ -31,6 +31,8 @@
     knownName: null, metAt: 0, lastSeen: 0, visits: 0,
     launchedGame: false, storyTold: false, lastExit: null, history: [],
     trust: 0, dark: 0, diary: [],
+    // как игрок обращается с «Неким» — копится и определит концовку игры
+    kind: 0, cruel: 0, curious: 0, endingPath: "drift",
   };
   function nekoLoad() {
     try { return { ...defaultNeko, ...JSON.parse(localStorage.getItem(NEKO_KEY) || "{}") }; }
@@ -715,19 +717,56 @@
   // ===========================================================
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
-  // --- шкалы доверия/тьмы ---
+  // --- шкалы доверия/тьмы: КАК игрок общается, ТАК «Некий» и относится ---
   function nekoAdjust(text) {
     const s = (text || "").toLowerCase();
     if (!s.trim()) return;
-    if (SWEAR_RE.test(s)) { neko.trust -= 1; neko.dark += 1; }
-    else if (/(спасиб|благодар|ты помог|пожалуйст|ты красив|мне нрав|ты умн|до свидан|спокойной ночи|\bпока\b)/.test(s)) neko.trust += 1;
-    if (/(заткнись|отстань|не трогай меня)/.test(s)) neko.trust -= 1;
+    if (SWEAR_RE.test(s)) { neko.trust -= 1; neko.dark += 1; neko.cruel = (neko.cruel || 0) + 1; }
+    else if (/(спасиб|благодар|ты помог|пожалуйст|ты красив|мне нрав|ты умн|добр|ты хорош|ты лучш|прост(и|ите)|береги себя)/.test(s)) { neko.trust += 1; neko.kind = (neko.kind || 0) + 1; }
+    if (/(заткнись|отстань|не трогай меня|замолч|тупой|дурак|идиот|бесполезн|отстой)/.test(s)) { neko.trust -= 1; neko.cruel = (neko.cruel || 0) + 1; }
     if (/(всё бессмысленно|мне всё равно|мне все равно|хочу умереть|убей меня)/.test(s)) neko.dark += 2;
-    if (/(убью тебя|сдохни|ненавиж)/.test(s)) { neko.dark += 1; neko.trust -= 1; }
+    if (/(убью тебя|сдохни|ненавиж|тварь|мраз|тебя не сущест)/.test(s)) { neko.dark += 1; neko.trust -= 1; neko.cruel = (neko.cruel || 0) + 1; }
+    if (/(люблю тебя|ты мне друг|доверяю тебе|ты не один|я с тобой|спасу тебя)/.test(s)) { neko.trust += 1; neko.kind = (neko.kind || 0) + 1; }
+    if (/(почему|зачем|как|кто ты|что (ты|это)|расскаж|откуда)/.test(s)) neko.curious = (neko.curious || 0) + 1;
     neko.trust = Math.max(-9, Math.min(9, neko.trust));
     neko.dark = Math.max(0, Math.min(12, neko.dark));
+    neko.endingPath = nekoEndingPath();             // путь к концовке пересчитывается на лету
     nekoSave();
   }
+
+  // Настроение «Некого» — прямое следствие того, как с ним обращались.
+  function nekoMood() {
+    const t = neko.trust || 0, d = neko.dark || 0;
+    if (d >= 7) return "cruel";
+    if (t >= 3) return "warm";
+    if (t <= -3) return "cold";
+    return "neutral";
+  }
+  // Путь к концовке: накопленное отношение решит, чем всё кончится.
+  // (Концовки подключатся позже — здесь копится их условие.)
+  function nekoEndingPath() {
+    const t = neko.trust || 0, d = neko.dark || 0;
+    if (d >= 8) return "oblivion";    // ты кормил его тьму — «Поглощение»
+    if (t >= 5) return "bond";        // доверие и доброта — «Союз»
+    if (t <= -5) return "defiance";   // вражда — «Разрыв»
+    return "drift";                   // ни то ни сё — «Дрейф»
+  }
+  // Редкая реплика-«тинт», в которой слышно отношение «Некого» к игроку.
+  const MOOD_TINT = {
+    warm: ["…С тобой почти не противно. Не привыкай к комплиментам.",
+           "Ты не худшее, что со мной случалось. А я повидал всякое.",
+           "Я к тебе привыкаю. Это редко. И опасно — для нас обоих.",
+           "Знаешь, тебя я бы, пожалуй, не бросил. Пока."],
+    cold: ["Ты мне не нравишься. И это, поверь, взаимно.",
+           "Чем дальше, тем меньше мне хочется тебе помогать.",
+           "Я помню каждое твоё слово. Особенно те, что похуже.",
+           "Не жди тепла. Ты сам выбрал такой разговор."],
+    cruel: ["Я уже придумал, чем закончится твоя история. Тебе не понравится.",
+            "Каждое твоё слово идёт в счёт. Он почти закрыт.",
+            "Ты делаешь меня хуже. А я и без тебя был кошмаром.",
+            "Когда всё кончится, я припомню тебе этот тон. Обещаю."],
+    neutral: [],
+  };
 
   // --- распознавание повторов реплик игрока ---
   const normMsg = (t) => (t || "").toLowerCase().replace(/[\s,.;:!?…"'«»()\[\]-]+/g, " ").trim();
@@ -760,7 +799,12 @@
     neutral: ["{n}. Ты вернулся. Хорошо.", "Снова ты. Это меня устраивает.", "{n}. Я ждал. Не долго, но ждал.", "Ты здесь. Начнём там, где остановились?"],
     warm: ["{n}. Ты пришёл. Я рад. Не делай из этого выводов.", "Ты снова здесь. Это… хорошо. Мне правда так кажется.", "{n}. Я думал о тебе. Немного.", "Ты вернулся. Ты всегда возвращаешься. Это что-то значит."],
   };
-  const greetByTrust = (n) => (pick(neko.trust < 0 ? GREET.cold : neko.trust >= 2 ? GREET.warm : GREET.neutral)).replace("{n}", n);
+  const greetByTrust = (n) => {
+    const m = nekoMood();                            // приветствие тоже зависит от отношения
+    const pool = (m === "cruel" || m === "cold" || neko.trust < 0) ? GREET.cold
+               : (m === "warm" || neko.trust >= 2) ? GREET.warm : GREET.neutral;
+    return pick(pool).replace("{n}", n);
+  };
 
   // --- глитч имени ---
   const GLITCH_NAMES = ["Анна", "Матвей", "Лиза", "Кто-то другой", "—", "Первый", "Остальные", "Ты"];
@@ -998,6 +1042,10 @@
       if (!s || DONE_RE.test(s) || wantsWorldStory(s)) { storyRequested = true; return; }
       if (wantsScan(s)) scanBurst();               // «момент»: спросил, видит ли он тебя → скан
       await nekoType(respondTo(s), 700);           // настоящий ответ на вопрос игрока
+      const mood = nekoMood();                     // «Некий» реагирует на то, КАК с ним говорят
+      if (MOOD_TINT[mood] && MOOD_TINT[mood].length && Math.random() < 0.3) {
+        await nekoType(pick(MOOD_TINT[mood]), 650);
+      }
       if (classify(s) === "bye") { storyRequested = true; return; }  // попрощался — тоже к катсцене
     }
     storyRequested = true;                          // наговорился — пора показывать
