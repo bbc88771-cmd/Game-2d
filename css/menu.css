@@ -295,12 +295,11 @@ html, body {
   text-shadow: 0 0 7px rgba(255,28,28,0.55);
   white-space: pre; overflow: hidden;
   padding: 0; margin: 0;
-  opacity: 0;
+  opacity: 0;                       /* яркость задаёт JS inline: фон ~0.18, бросок ~0.6 */
+  transition: opacity 0.3s ease;
   pointer-events: none;
   will-change: contents;
 }
-/* резко появляется (не плавно), пока идёт «сканирование» */
-.neko-code.run { opacity: 0.6; }
 /* «найденные» фрагменты — ярче и с сильным свечением, словно подсветка совпадения */
 .neko-code b {
   font-weight: 400;

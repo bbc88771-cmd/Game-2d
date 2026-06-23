@@ -434,45 +434,137 @@
   // Полноэкранный «красный код»: плотный поток данных, который очень быстро
   // перематывается и в случайных местах резко вспыхивает «найденными»
   // фрагментами — эффект лихорадочного поиска информации. Покрывает весь экран.
-  function codeRain(dur) {
-    return new Promise((resolve) => {
-      const code = $("#neko-code");
-      if (!code) { resolve(); return; }
-      const g = measureGlyph(code);
-      const cols = Math.ceil(window.innerWidth / g.charW) + 4;
-      const rows = Math.ceil(window.innerHeight / g.lineH) + 4;
-      let lines = Array.from({ length: rows }, () => makeCodeLine(cols));
-      code.classList.add("run");
-      const start = Date.now();
-      let raf = 0, last = 0;
-      const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      const frame = (t) => {
-        if (skipNeko || Date.now() - start >= dur) {
-          cancelAnimationFrame(raf);
-          code.classList.remove("run"); code.innerHTML = ""; resolve(); return;
-        }
-        if (t - last >= 28) {                            // ~30 кадров/с — очень быстрый скролл
-          last = t;
-          const shift = 2 + ((Math.random() * 4) | 0);   // сдвиг на 2–5 строк за кадр
-          for (let i = 0; i < shift; i++) { lines.shift(); lines.push(makeCodeLine(cols)); }
-          const html = new Array(lines.length);
-          for (let i = 0; i < lines.length; i++) {
-            const ln = lines[i];
-            if (Math.random() < 0.07) {                  // резкая «вспышка» в случайном месте строки
-              const x = (Math.random() * ln.length * 0.7) | 0;
-              const w = 6 + ((Math.random() * 20) | 0);
-              html[i] = esc(ln.slice(0, x)) + "<b>" + esc(ln.slice(x, x + w)) + "</b>" + esc(ln.slice(x + w));
-            } else {
-              html[i] = esc(ln);
-            }
+  // Один непрерывный движок; яркость регулируется (фон диалога ↔ яркий бросок).
+  let codeFX = null;        // активный поток кода: { setOpacity, stop }
+  let codeScanHits = [];    // «найденные» личные фрагменты во время скана
+  let codeScanning = false; // идёт ли сейчас активный скан (ярче и чаще вспышки)
+  const CODE_BG = 0.16;     // яркость фонового потока на экране диалога
+  const codeEsc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // «Найденные» данные об игроке — то, что реально доступно браузеру.
+  // Подаются как подсвеченные строки кода: будто «Некий» сканирует тебя.
+  function getScanHits() {
+    const hits = [];
+    try { const tz = Intl.DateTimeFormat().resolvedOptions().timeZone; if (tz) hits.push("find:TZ=" + tz); } catch {}
+    const ua = navigator.userAgent || "";
+    const os = /Windows/.test(ua) ? "Windows" : /Macintosh|Mac OS/.test(ua) ? "macOS"
+             : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS"
+             : /Linux/.test(ua) ? "Linux" : "unknown";
+    hits.push("mem.scan(os)=" + os);
+    const now = new Date();
+    hits.push("clock.local=" + String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0"));
+    const lang = (navigator.language || "").toLowerCase(); if (lang) hits.push("locale=" + lang);
+    try { if (window.screen) hits.push("screen=" + window.screen.width + "x" + window.screen.height); } catch {}
+    if (navigator.hardwareConcurrency) hits.push("cpu.threads=" + navigator.hardwareConcurrency);
+    if (navigator.deviceMemory) hits.push("ram=" + navigator.deviceMemory + "gb");
+    const n = neko.knownName;
+    if (n) { hits.push('soul.bind("' + n + '")'); hits.push("who_are_you :: " + n); }
+    hits.push("trace[node]=" + "█".repeat(5 + ((Math.random() * 4) | 0)));
+    hits.push("rift.open(target=YOU)");
+    return hits;
+  }
+
+  function startCodeBackground(opacity = CODE_BG) {
+    const code = $("#neko-code");
+    if (!code) return;
+    if (codeFX) { codeFX.setOpacity(opacity); return; }   // уже идёт — только меняем яркость
+    let g = measureGlyph(code);
+    let cols = Math.ceil(window.innerWidth / g.charW) + 4;
+    let rows = Math.ceil(window.innerHeight / g.lineH) + 4;
+    let lines = Array.from({ length: rows }, () => makeCodeLine(cols));
+    code.style.opacity = String(opacity);
+    code.classList.add("run");
+    let raf = 0, last = 0, stopped = false;
+    const frame = (t) => {
+      if (stopped) return;
+      if (t - last >= 28) {                              // ~30 кадров/с — очень быстрый скролл
+        last = t;
+        const shift = (codeScanning ? 2 : 1) + ((Math.random() * 4) | 0);
+        for (let i = 0; i < shift; i++) { lines.shift(); lines.push(makeCodeLine(cols)); }
+        const flashP = codeScanning ? 0.13 : 0.06;       // во время скана вспышек больше
+        const hitP = codeScanning && codeScanHits.length ? 0.12 : 0;
+        const html = new Array(lines.length);
+        for (let i = 0; i < lines.length; i++) {
+          const ln = lines[i];
+          if (hitP && Math.random() < hitP) {            // «найденный» личный фрагмент — он сканирует тебя
+            const hit = codeScanHits[(Math.random() * codeScanHits.length) | 0];
+            html[i] = "<b>" + codeEsc(hit) + "</b>" + codeEsc(ln.slice(hit.length));
+          } else if (Math.random() < flashP) {           // резкая «вспышка» в случайном месте строки
+            const x = (Math.random() * ln.length * 0.7) | 0;
+            const w = 6 + ((Math.random() * 20) | 0);
+            html[i] = codeEsc(ln.slice(0, x)) + "<b>" + codeEsc(ln.slice(x, x + w)) + "</b>" + codeEsc(ln.slice(x + w));
+          } else {
+            html[i] = codeEsc(ln);
           }
-          code.innerHTML = html.join("\n");
         }
-        raf = requestAnimationFrame(frame);
-      };
+        code.innerHTML = html.join("\n");
+      }
       raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    // при ресайзе пересчитываем размеры поля, чтобы оно всегда было на весь экран
+    const onResize = () => {
+      g = measureGlyph(code);
+      cols = Math.ceil(window.innerWidth / g.charW) + 4;
+      rows = Math.ceil(window.innerHeight / g.lineH) + 4;
+      lines = Array.from({ length: rows }, () => makeCodeLine(cols));
+    };
+    window.addEventListener("resize", onResize);
+    codeFX = {
+      setOpacity: (o) => { code.style.opacity = String(o); },
+      stop: () => {
+        stopped = true; cancelAnimationFrame(raf);
+        window.removeEventListener("resize", onResize);
+        code.classList.remove("run"); code.innerHTML = ""; code.style.opacity = "";
+      },
+    };
+  }
+  function stopCodeBackground() { if (codeFX) { codeFX.stop(); codeFX = null; } }
+
+  // Яркий «бросок» кода на dur мс. Если фон уже идёт — временно усиливаем его
+  // и возвращаем прежнюю яркость; если нет — запускаем и гасим по завершении.
+  function codeRain(dur, peak = 0.6) {
+    return new Promise((resolve) => {
+      const hadBg = !!codeFX;
+      startCodeBackground(peak);                          // поднимаем яркость до «броска»
+      if (hadBg) codeFX.setOpacity(peak);
+      const start = Date.now();
+      const tick = () => {
+        if (skipNeko || Date.now() - start >= dur) {
+          if (hadBg && codeFX) codeFX.setOpacity(CODE_BG); // вернуть фоновую яркость
+          else stopCodeBackground();                       // мы сами запускали — гасим
+          resolve(); return;
+        }
+        setTimeout(tick, 60);
+      };
+      setTimeout(tick, 60);
     });
   }
+
+  // Скан: на короткое время поток ярче, чаще вспышки, в нём мелькают
+  // «найденные» данные о тебе. Будто «Некий» внезапно полез смотреть, кто ты.
+  let scanTimer = null;
+  function scanBurst(dur = 1100 + Math.random() * 1100) {
+    if (!codeFX) return;                 // только поверх идущего фона
+    codeScanHits = getScanHits();
+    codeScanning = true;
+    codeFX.setOpacity(0.52);
+    nekoTick();                          // короткий «бип» сканера
+    setTimeout(() => {
+      codeScanning = false;
+      codeScanHits = [];
+      if (codeFX) codeFX.setOpacity(CODE_BG);
+    }, dur);
+  }
+  // Планировщик случайных сканов, пока открыт экран диалога.
+  function scheduleScan(first) {
+    clearTimeout(scanTimer);
+    const delay = first ? (3000 + Math.random() * 6000)   // первый — через 3–9 с
+                        : (8000 + Math.random() * 17000);  // дальше — раз в 8–25 с
+    scanTimer = setTimeout(() => { scanBurst(); scheduleScan(false); }, delay);
+  }
+  function startScanScheduler() { scheduleScan(true); }
+  function stopScanScheduler() { clearTimeout(scanTimer); scanTimer = null; codeScanning = false; codeScanHits = []; }
 
   // печатает реплику «Некого» НОВЫМ сообщением в логе (старые остаются)
   function nekoType(text, hold = 850) {
@@ -737,8 +829,12 @@
     intro.hidden = false;
     const onSkip = () => { skipNeko = true; };
     skip.addEventListener("click", onSkip);
+    startCodeBackground();          // красный код — фон всего экрана переписки
+    startScanScheduler();           // и случайные «сканы» о тебе во время разговора
     const finish = () => {
       skip.removeEventListener("click", onSkip);
+      stopScanScheduler();
+      stopCodeBackground();
       chatClear();                 // очищаем лог при выходе из интро
       intro.hidden = true;
     };
