@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Sunset of the World</title>
-  <link rel="stylesheet" href="css/menu.css?v=6" />
+  <link rel="stylesheet" href="css/menu.css?v=7" />
 </head>
 <body>
   <!-- ============ ГЛАВНОЕ МЕНЮ ============ -->
@@ -27,6 +27,7 @@
       </button>
 
       <p class="build-tag">prototype build · web</p>
+      <p class="menu-neko" id="menu-neko" aria-hidden="true"></p>
     </div>
   </main>
 
@@ -61,6 +62,13 @@
     <button class="neko-skip" id="neko-skip">ускорить ▸</button>
   </div>
 
-  <script src="js/menu.js?v=6"></script>
+  <!-- ============ КАТСЦЕНА ============ -->
+  <div id="cutscene" class="cutscene" hidden>
+    <div class="cut-frame" id="cut-frame"></div>
+    <p class="cut-caption" id="cut-caption"></p>
+    <button class="neko-skip" id="cut-skip">пропустить ▸</button>
+  </div>
+
+  <script src="js/menu.js?v=7"></script>
 </body>
 </html>
