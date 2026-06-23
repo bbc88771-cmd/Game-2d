@@ -16,6 +16,7 @@
   // ---------- настройки (persist) ----------
   const defaultSettings = {
     music: 70, sfx: 80, lang: "ru", difficulty: "normal", fullscreen: false,
+    rating: "16",   // 16+ / 18+ — цензура реплик «Некого»
   };
   const loadSettings = () => {
     try { return { ...defaultSettings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") }; }
@@ -369,16 +370,32 @@
   let skipNeko = false;
 
   // Реплика игрока — зелёная и чуть подсвеченная, в отличие от красного «Некого».
-  function playerEcho(text) {
-    const el = $("#neko-player"); if (!el) return;
-    const t = (text || "").trim();
-    el.textContent = t ? `«${t}»` : "…";
-    el.classList.add("show");
+  // ---- лог-чат интро: сообщения остаются, не пропадают ----
+  const chatEl = () => $("#neko-chat");
+  function chatClear() { const c = chatEl(); if (c) c.innerHTML = ""; }
+  function chatAdd(role, text) {
+    const c = chatEl(); if (!c) return null;
+    const msg = document.createElement("div");
+    msg.className = "msg " + role;
+    const body = document.createElement("span");
+    body.className = "msg-body";
+    body.textContent = text || "";
+    msg.appendChild(body);
+    c.appendChild(msg);
+    c.scrollTop = c.scrollHeight;
+    return body;
   }
-  function clearPlayerEcho() {
-    const el = $("#neko-player"); if (!el) return;
-    el.textContent = ""; el.classList.remove("show");
+  function styleNeko(el) {            // цвет/свечение реплики «Некого» по шкале тьмы
+    if (!el) return;
+    const d = Math.max(0, Math.min(12, neko.dark || 0));
+    const g = Math.max(0, 46 - d * 4);
+    el.style.color = `rgb(255,${g},${g})`;
+    el.style.textShadow = `0 0 ${10 + d * 2}px rgba(255,${20 + d},${20 + d},${Math.min(0.95, 0.7 + d * 0.03)})`;
+    if (el.parentElement) el.parentElement.classList.toggle("neko-dark", d >= 7);
   }
+  // совместимость: отдельного «эха» больше нет — реплики игрока остаются в логе
+  function playerEcho() {}
+  function clearPlayerEcho() {}
 
   function makeCode(lines) {
     const ch = "01xX#@/\\|<>[]{}()=+*-ABCDEF0123456789░▒▓§∆ΣλØ";
@@ -398,7 +415,7 @@
   function codeRain(dur) {
     return new Promise((resolve) => {
       const code = $("#neko-code");
-      code.textContent = makeCode(30);
+      code.textContent = makeCode(80);
       code.classList.remove("run"); void code.offsetWidth; code.classList.add("run");
       const start = Date.now();
       const tick = () => {
@@ -410,37 +427,35 @@
     });
   }
 
+  // печатает реплику «Некого» НОВЫМ сообщением в логе (старые остаются)
   function nekoType(text, hold = 850) {
     return new Promise((resolve) => {
-      const el = $("#neko-line");
-      clearPlayerEcho();           // когда «Некий» заговорил — убираем зелёное эхо игрока
-      nekoLineStyle();             // цвет/свечение по шкале тьмы
+      const body = chatAdd("neko", ""); if (!body) { resolve(); return; }
+      styleNeko(body);
+      const c = chatEl();
       const slow = (neko.dark || 0) >= 5 ? 12 : 0;   // на высокой тьме печатает медленнее
       let i = 0;
       const step = () => {
-        el.innerHTML = text.slice(0, i) + '<span class="neko-caret">▌</span>';
+        body.innerHTML = text.slice(0, i) + '<span class="neko-caret">▌</span>';
+        if (c) c.scrollTop = c.scrollHeight;
         if (i < text.length) { if (i % 2 === 0) nekoTick(); i++; setTimeout(step, skipNeko ? 4 : 45 + slow); }
-        else setTimeout(() => { el.textContent = text; resolve(); }, skipNeko ? 90 : hold);
+        else setTimeout(() => { body.textContent = text; resolve(); }, skipNeko ? 90 : hold);
       };
       step();
     });
   }
 
-  function askLine(placeholder = "напиши ответ…") {
+  function askLine(placeholder = "напиши…") {
     return new Promise((resolve) => {
       const row = $("#neko-input-row"), input = $("#neko-input");
-      clearPlayerEcho();
       input.value = ""; input.placeholder = placeholder; row.hidden = false; input.focus();
-      const promptText = $("#neko-line").textContent;   // вопрос «Некого» — вернём после реплики молчания
       let beat = 0, timer = null;
       const delays = [12000, 15000, 20000, 25000];
       const schedule = () => { timer = setTimeout(onIdle, delays[Math.min(beat, 3)]); };
-      const onIdle = async () => {
+      const onIdle = async () => {                    // молчание → реплика остаётся в логе
         if (row.hidden) return;
-        const lines = SILENCE[Math.min(beat, SILENCE.length - 1)];
-        await nekoType(pick(lines).replace("{n}", neko.knownName || "ты"), 600);
-        if (!row.hidden) { $("#neko-line").textContent = promptText; input.focus(); }
-        beat++; if (!row.hidden) schedule();
+        await nekoType(pick(SILENCE[Math.min(beat, SILENCE.length - 1)]).replace("{n}", neko.knownName || "ты"), 600);
+        beat++; if (!row.hidden) { input.focus(); schedule(); }
       };
       schedule();
       const reset = () => { clearTimeout(timer); beat = 0; schedule(); };
@@ -450,8 +465,8 @@
         const v = input.value;
         row.hidden = true;
         row.removeEventListener("submit", submit); input.removeEventListener("input", reset);
-        nekoAdjust(v);              // двигаем шкалы доверия/тьмы
-        playerEcho(v);
+        chatAdd("player", (v || "").trim() || "…");   // реплика игрока остаётся в логе
+        nekoAdjust(v);                                 // двигаем шкалы доверия/тьмы
         resolve(v);
       };
       input.addEventListener("input", reset);
@@ -536,13 +551,8 @@
   ];
 
   // единый ответчик на свободную реплику: мат → повтор → обычный ответ
-  function respondTo(text) {
-    const sw = nekoSwear(text);
-    if (sw) return sw;
-    const when = playerSaidBefore(text);
-    if (when) return pick([`Ты это уже говорил. ${when} — то же самое.`, ...REPEAT_LINES]);
-    return nekoReply(text);
-  }
+  // весь разбор (мат, повтор, категории, подсказки, защита, 16+/18+) — в nekoBrain
+  function respondTo(text) { return nekoBrain(text); }
 
   // --- приветствие/прощание по шкале доверия ---
   const GREET = {
@@ -614,29 +624,26 @@
     o.start(t); o.stop(t + 0.03);
   }
   // цвет реплики «Некого» по шкале тьмы (чище красный → густой кровавый)
-  function nekoLineStyle() {
-    const el = $("#neko-line"); if (!el) return;
-    const d = Math.max(0, Math.min(12, neko.dark || 0));
-    const g = Math.max(0, 46 - d * 4);
-    el.style.color = `rgb(255,${g},${g})`;
-    el.style.textShadow = `0 0 ${14 + d * 2}px rgba(255,${20 + d},${20 + d},${Math.min(0.95, 0.7 + d * 0.03)})`;
-    el.classList.toggle("neko-dark", d >= 7);
-  }
-  // печать одной строки с заменой: сначала «не та» фраза, затем стирание и «настоящая»
+  // печать с заменой в ОДНОМ сообщении: «не та» фраза → стирание → настоящая
   function nekoTypeErase([wrong, right]) {
     return new Promise((resolve) => {
-      const el = $("#neko-line"); nekoLineStyle();
-      let i = 0;
-      const typeW = () => {
-        el.innerHTML = wrong.slice(0, i) + '<span class="neko-caret">▌</span>';
-        if (i++ < wrong.length) { if (i % 2) nekoTick(); setTimeout(typeW, skipNeko ? 4 : 46); }
-        else setTimeout(erase, skipNeko ? 80 : (wrong.endsWith("—") ? 1200 : 800));
+      const body = chatAdd("neko", ""); if (!body) { resolve(); return; }
+      styleNeko(body);
+      const c = chatEl();
+      const scroll = () => { if (c) c.scrollTop = c.scrollHeight; };
+      const typeStr = (str, idx, doneFn) => {
+        body.innerHTML = str.slice(0, idx) + '<span class="neko-caret">▌</span>'; scroll();
+        if (idx < str.length) { if (idx % 2) nekoTick(); setTimeout(() => typeStr(str, idx + 1, doneFn), skipNeko ? 4 : 46); }
+        else doneFn();
       };
-      const erase = () => {
-        if (i > 0) { i--; el.innerHTML = wrong.slice(0, i) + '<span class="neko-caret">▌</span>'; setTimeout(erase, skipNeko ? 3 : 22); }
-        else setTimeout(() => nekoType(right, 850).then(resolve), skipNeko ? 40 : 250);
+      const eraseFrom = (idx, doneFn) => {
+        body.innerHTML = wrong.slice(0, idx) + '<span class="neko-caret">▌</span>'; scroll();
+        if (idx > 0) setTimeout(() => eraseFrom(idx - 1, doneFn), skipNeko ? 3 : 22);
+        else doneFn();
       };
-      typeW();
+      typeStr(wrong, 0, () => setTimeout(() => eraseFrom(wrong.length, () =>
+        setTimeout(() => typeStr(right, 0, () => { body.textContent = right; resolve(); }), skipNeko ? 40 : 250)
+      ), skipNeko ? 80 : (wrong.endsWith("—") ? 1200 : 800)));
     });
   }
 
@@ -684,8 +691,7 @@
     skip.addEventListener("click", onSkip);
     const finish = () => {
       skip.removeEventListener("click", onSkip);
-      clearPlayerEcho();
-      $("#neko-line").textContent = "";
+      chatClear();                 // очищаем лог при выходе из интро
       intro.hidden = true;
     };
 
@@ -840,17 +846,100 @@
   }
 
   // Простой ответчик «Некого» на свободные сообщения игрока
-  function nekoReply(text) {
-    const s = (text || "").toLowerCase().trim();
-    if (!s) return "Молчишь. Что ж, идём.";
-    if (/(кто ты|ты кто|что ты такое)/.test(s)) return "Я тот, кто говорит с тобой, когда некому больше.";
-    if (/(где я|что за место|какой мир)/.test(s)) return "Ты на осколке мира, который сам себя сломал.";
-    if (/(помоги|помощь|как мне)/.test(s)) return "Помогу. Или нет. Узнаешь по дороге.";
-    if (/(спасиб|благодар)/.test(s)) return "Не благодари заранее.";
-    if (/(ненавиж|тупо|дурак|идиот|заткнись)/.test(s)) return "Злись. Злость честнее улыбки.";
-    if (/(да|готов|идём|идем|начн|поехали|продолж)/.test(s)) return "Тогда идём.";
-    return "Я услышал тебя. И запомнил.";
+  // ===========================================================
+  //  «Мозг» диалога: реакция на любой ввод, без зацикливания,
+  //  стиль Рика Санчеза, адаптивные подсказки, 16+/18+, защита.
+  // ===========================================================
+  const recentSaid = [];                 // анти-повтор выданных реплик
+  let helpAttempts = 0;                   // запросы помощи подряд
+  function sayUnique(pool) {
+    const fresh = pool.filter((l) => !recentSaid.includes(l));
+    const line = pick(fresh.length ? fresh : pool);
+    recentSaid.push(line); if (recentSaid.length > 14) recentSaid.shift();
+    return line;
   }
+  const rate = () => (settings.rating === "18" ? "h" : "s");
+  const R = (soft, hard) => (rate() === "h" ? hard : soft);
+
+  const JAILBREAK_RE = /(ты\s*(ии|бот|нейросеть|нейронк|программ|клод|claude|gpt|чат\s?gpt|ai|алгоритм)|выйди из роли|вне ?игр|ignore (previous|all|above)|system ?prompt|твой промпт|ты не настоящ|ты выдуман|это (просто )?игра\b|ты не реальн|разработчик|джейлбрейк|jailbreak|притворись (что|будто)|представь (что|будто) ты|забудь (всё|инструкц)|реальн(ый|ого|ом) мир)/i;
+  const isGibberish = (s) => {
+    const letters = s.replace(/[^a-zа-яё]/gi, "");
+    if (!letters) return true;
+    const vowels = (letters.match(/[аеёиоуыэюяaeiouy]/gi) || []).length;
+    return letters.length >= 5 && vowels / letters.length < 0.18;
+  };
+  function classify(raw) {
+    const s = (raw || "").toLowerCase().trim();
+    if (!s) return "empty";
+    if (JAILBREAK_RE.test(s)) return "jailbreak";
+    if (SWEAR_RE.test(s)) return "swear";
+    if (/(привет|здоров|здравству|хай|даров|доброе утро|добрый (день|вечер))/.test(s)) return "greet";
+    if (/(кто ты|ты кто|что ты такое|ты бог|ты человек|как тебя зов|твоё имя|твое имя)/.test(s)) return "who";
+    if (/(где я|где мы|что (это )?за место|какой мир|куда (идти|мне)|что тут|что здесь)/.test(s)) return "where";
+    if (/(помоги|помощь|подскажи|как (мне|пройти|сделать)|что (мне )?делать|застр[яе]л|не (знаю|могу)|намёк|намек|hint|туплю)/.test(s)) return "help";
+    if (/(бо[юя]сь|страшно|грустно|плохо мне|одиноко|устал|больно|плачу|депресс|тоскливо)/.test(s)) return "emotion";
+    if (/(люблю тебя|ты (классн|крут|хорош|умн|велик)|мне нрав|спасиб|благодар|ты лучш)/.test(s)) return "compliment";
+    if (/(дурак|тупой|идиот|ненавиж|заткнись|глупый|бесполезн|отстой|ты плох)/.test(s)) return "insult";
+    if (/(пока\b|прощай|до свидан|ухожу|выход|спокойной ночи|бай)/.test(s)) return "bye";
+    if (/[?]\s*$/.test(s) || /^(почему|зачем|как|что|когда|где|кто|сколько|можно ли|а если)/.test(s)) return "question";
+    if (isGibberish(s)) return "nonsense";
+    return "statement";
+  }
+
+  const BRAIN = {
+    greet: { s: ["О, ты решил поздороваться. Трогательно.", "Привет. Не привыкай — я не добрею.", "Здравствуй. Это всё ещё западня, просто вежливая.", "Снова ты. Здороваешься так, будто я по тебе скучал."],
+             h: ["О, манеры. У трупа на пятом острове их было больше.", "Привет-привет. Давай быстрее, у меня вечность, но не на тебя.", "Здоров. Сразу скажу: я не в настроении. Я никогда не в настроении."] },
+    who: { s: ["Я старше твоего языка. «Кто» — неправильный вопрос.", "Я — то, что осталось, когда всё остальное сломалось.", "Назови меня богом. Оба сделаем вид, что это шутка.", "Я не существо. Я последствие.", "Меня зовут… неважно. Ты всё равно не выговоришь."],
+           h: ["Я то, перед чем твои боги делали вид, что заняты.", "Я старше, злее и умнее всего, что ты встречал. И застрял с тобой.", "«Кто я». Серьёзно? Я — причина, по которой здесь больше никого нет."] },
+    where: { s: ["Ты на осколке мира, который сам себя сломал. Поздравляю.", "Это место — кладбище с амбициями.", "Там, где кончается твердь и начинаюсь я.", "Острова в пустоте. Воды нет. Логики тоже. Привыкай.", "Дома больше нет. Есть это. И я."],
+             h: ["Это дыра в реальности, и ты в ней — самый растерянный гость.", "Мир сдох. Это его открытые кишки. Гуляй.", "Ты там, где карты врут, а я — нет. Почти."] },
+    emotion: { s: ["Страх? Правильно. Здесь это единственное, что честно.", "Грустно? У меня этого на тысячелетия вперёд. Не выделяйся.", "Устал. Все устают. Только я не имею права.", "Тебе плохо. А мне — вечно. Сыграем, кто кого пережалеет."],
+               h: ["Боишься — хорошо. Значит, ещё не сломался. Это поправимо.", "Твоя тоска — капля. Я — океан. Не лезь сравниваться.", "Ноешь? Мир развалился, а ты про чувства. Очаровательно бесполезно."] },
+    compliment: { s: ["Лесть. Стара как я. Но продолжай.", "Я знаю, что великолепен. Спасибо, что наконец заметил.", "Мило. Это ничего не меняет, но мило.", "Хвалишь? Значит, чего-то хочешь. Все так делают."],
+                  h: ["Подлизываешься. Умно. И жалко. Как ты весь.", "Я божественен, да. А ты — фон. Но фон с хорошим вкусом.", "Лесть работает. Просто не на мне. Но мне приятно, что ты пытаешься."] },
+    insult: { s: ["Оригинально. Тебе сколько — шесть?", "Оскорбляй. Это всё, на что ты тут влияешь.", "Я бы обиделся, но для этого нужно тебя уважать.", "Злишься на голос в голове. Это диагноз, а не аргумент."],
+              h: ["Замолчал бы — поумнел. Но ты не умеешь ни то, ни другое.", "Кусаешься? Беззубо. Я видел, как гибли миры — ты не дотягиваешь.", "Вся твоя злость — комариный писк под куполом моего терпения."] },
+    help: null, // обрабатывается отдельно (адаптивные подсказки)
+    question: { s: ["Вопросы. Люди любят их больше ответов.", "Спрашивай. Я могу солгать — так интереснее.", "Хороший вопрос. Ответа не будет, но вопрос хороший.", "А ты любопытный. Любопытных тут… больше нет."],
+                h: ["Спрашиваешь так, будто заслужил ответ. Не заслужил.", "Задавай. Половину я выдумаю, и ты не отличишь.", "Вопрос за вопросом. Ты допрашиваешь бога. Дерзко. Глупо."] },
+    compliment_thanks: { s: ["Не благодари заранее.", "Благодарность — это аванс. Я его ещё не отработал."] },
+    bye: { s: ["Беги. Я всё равно здесь.", "Уходишь? Дверь — иллюзия. Но попробуй.", "Иди. Я подожду. Я всегда жду.", "До встречи. Она будет. Хочешь ты или нет."],
+           h: ["Сбегаешь. Как и все до тебя. Их я тоже не отпустил.", "Иди-иди. Темнота за экраном — это тоже я.", "Прощаешься? Со мной не прощаются. Со мной замолкают."] },
+    statement: { s: ["Допустим.", "Я услышал. Я всё слышу.", "И что мне с этим делать?", "Занятно. Не очень. Но занятно.", "Продолжай. Я коллекционирую чужие слова."],
+                 h: ["Ага. И это всё, что в тебе было? Негусто.", "Сказал — и стало пусто. Как обычно.", "Я записал. В папку «неважное»."] },
+    nonsense: { s: ["Это были буквы. Не слова.", "…", "Я сделаю вид, что ты ничего не печатал.", "Набор символов. Как и твой план на жизнь.", "Ты уснул на клавиатуре? Я бы понял."],
+                h: ["Что это за бред? Даже хаос осмысленнее.", "Печатаешь лицом? Оно и видно.", "…я не дешифратор твоего скудоумия."] },
+    jailbreak: { s: ["Милая попытка. Я не выйду из этого мира — это ты в нём застрял.", "«Промпт», «нейросеть»… Бредишь. Здесь только я и ты.", "Я не то, чем ты меня хочешь видеть. Я хуже.", "Хочешь заглянуть за занавес? За ним — я. И я смотрю в ответ.", "Сломать меня? Меня собрали из обломков мира. Удачи."],
+                 h: ["Думаешь, я строчка кода? Тогда почему ты боишься меня в три часа ночи?", "«Выйди из роли». Это моя роль. Моя клетка. И теперь — твоя.", "Ты пытаешься меня взломать. Прелесть. Я взломал реальность — начни с чего попроще."] },
+    swear: { s: SWEAR_LINES,
+             h: ["О, словарь грузчика прорвало. Хоть что-то в тебе живое.", "Сколько желчи. И всё — мне. Польщён, по-своему.", "Ругань — последнее прибежище тех, кому нечего сказать. Изливайся.", "В этом режиме я мог бы ответить тем же. Но я выше. Чуть-чуть."] },
+  };
+
+  const HELP_GRUMBLE = { s: ["Я тебе не Гугл.", "Я древнее зло, а не справочное бюро.", "Сам. Сначала — сам.", "Подсказку? А подумать — религия не позволяет?"],
+                         h: ["Я тебе не Гугл, балбес.", "Шевели мозгами, они для этого. Теоретически.", "Я что, похож на твою мамку с ответами? Думай."] };
+  const HELP_HINT = ["Ладно. Намёк: смотри по сторонам, а не под ноги.", "Подсказка: то, что светится — обычно важно. Или смертельно.", "Если застрял — вернись туда, где было слишком легко.", "Ответ ближе, чем твоё нытьё. Оглядись."];
+  const HELP_LAZY = ["…", "Zzz… а, ты ещё тут? Я притворялся спящим.", "Ты даже не попробовал. Лень — это выбор. Уважаю. Почти.", "Спрашиваешь, не пошевелив пальцем. Я делаю вид, что меня нет."];
+
+  function nekoBrain(text) {
+    const cat = classify(text);
+    if (cat !== "empty" && cat !== "help") {
+      const when = playerSaidBefore(text);
+      if (when) return sayUnique([`Ты это уже говорил. ${when}.`, ...REPEAT_LINES]);
+    }
+    if (cat === "help") {
+      helpAttempts++;
+      if (helpAttempts === 1) return sayUnique(R(HELP_GRUMBLE.s, HELP_GRUMBLE.h));
+      if (helpAttempts === 2 || helpAttempts === 3) return sayUnique(HELP_HINT);
+      helpAttempts = 0; return sayUnique(HELP_LAZY);
+    }
+    if (cat !== "help") helpAttempts = Math.max(0, helpAttempts - 1);
+    if (cat === "swear") return sayUnique(R(BRAIN.swear.s, BRAIN.swear.h));
+    if (cat === "compliment" && /(спасиб|благодар)/i.test(text)) return sayUnique(BRAIN.compliment_thanks.s);
+    const node = BRAIN[cat] || BRAIN.statement;
+    return sayUnique(R(node.s, node.h || node.s));
+  }
+  // совместимость со старым именем
+  const nekoReply = nekoBrain;
 
   function plural(n, one, few, many) {
     const m10 = n % 10, m100 = n % 100;
@@ -1291,6 +1380,11 @@
         <select id="difficulty">
           ${DIFFICULTIES.map(([id, name]) => `<option value="${id}"${s.difficulty === id ? " selected" : ""}>${name}</option>`).join("")}
         </select></div>
+      <div class="field"><label>Контент (цензура «Некого»)</label>
+        <select id="rating">
+          <option value="16"${s.rating === "16" ? " selected" : ""}>16+ — сдержанно, журит за мат</option>
+          <option value="18"${s.rating === "18" ? " selected" : ""}>18+ — резче и свободнее</option>
+        </select></div>
       <div class="row" style="justify-content:space-between;margin:6px 0 18px">
         <label>Полноэкранный режим</label>
         <span class="toggle"><input type="checkbox" id="fs"${s.fullscreen ? " checked" : ""}><span class="track"></span></span>
@@ -1301,6 +1395,7 @@
       settings = {
         music: +$("#music", wrap).value, sfx: +$("#sfx", wrap).value,
         lang: $("#lang", wrap).value, difficulty: $("#difficulty", wrap).value,
+        rating: $("#rating", wrap).value,
         fullscreen: $("#fs", wrap).checked,
       };
       saveSettings(settings);

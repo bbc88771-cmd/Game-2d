@@ -278,50 +278,87 @@ html, body {
 .neko-intro {
   position: fixed; inset: 0; z-index: 80;
   background: #000;
-  display: grid; place-items: center;
-  padding: 6vw;
-  cursor: default;
+  display: grid; place-items: start center;     /* диалог — вверху по центру */
+  padding: clamp(12px, 4vh, 44px) 4vw 4vh;
+  cursor: default; overflow: hidden;
 }
 .neko-intro[hidden] { display: none; }
 
-/* слой «бегущего кода» на заднем плане */
+/* код — НА ВЕСЬ ЭКРАН, ПОЗАДИ текста, быстрый «скан»-скролл */
 .neko-code {
-  position: absolute; inset: 0; margin: 0;
+  position: fixed; left: 0; right: 0; top: -10%; bottom: -10%; margin: 0; z-index: 0;
   font-family: "DejaVu Sans Mono", ui-monospace, monospace;
   font-size: clamp(11px, 1.7vh, 16px);
-  line-height: 1.5;
+  line-height: 1.45;
   color: #ff2e2e;
-  text-shadow: 0 0 8px rgba(255,30,30,0.7);
+  text-shadow: 0 0 8px rgba(255,30,30,0.55);
   white-space: pre; overflow: hidden;
-  padding: 4vh 3vw;
+  padding: 0 3vw;
   opacity: 0;
   pointer-events: none;
 }
-.neko-code.run { animation: neko-code-run 2s ease forwards; }
-@keyframes neko-code-run {
-  0% { opacity: 0; transform: translateY(26px); }
-  16% { opacity: 0.85; }
-  84% { opacity: 0.85; }
-  100% { opacity: 0; transform: translateY(-34px); }
+.neko-code.run { animation: neko-code-scan 1.8s linear forwards; }
+@keyframes neko-code-scan {
+  0% { opacity: 0; transform: translateY(10%); }
+  10% { opacity: 0.5; }
+  85% { opacity: 0.5; }
+  100% { opacity: 0; transform: translateY(-85%); }
 }
 
-/* центральный диалог поверх кода */
+/* окно чата — вверху по центру, поверх кода; сообщения ОСТАЮТСЯ */
 .neko-dialog {
   position: relative; z-index: 1;
-  width: min(860px, 92vw);
-  display: flex; flex-direction: column; align-items: center;
-  gap: clamp(18px, 3.4vh, 40px);
-  text-align: center;
+  width: min(820px, 94vw);
+  margin-top: clamp(6px, 5vh, 54px);
+  display: flex; flex-direction: column; align-items: stretch;
+  gap: clamp(12px, 2.2vh, 24px);
 }
-.neko-input-row { display: flex; gap: 10px; align-items: center; }
+.neko-chat {
+  display: flex; flex-direction: column; gap: 10px;
+  max-height: 58vh; overflow-y: auto; padding: 4px;
+  scrollbar-width: thin;
+}
+.msg {
+  position: relative;
+  font-family: var(--serif);
+  font-size: clamp(17px, 2.4vh, 26px);
+  line-height: 1.4;
+  padding: 8px 14px 8px 36px;
+  border-radius: 10px;
+  max-width: 92%;
+  overflow-wrap: anywhere;
+  background: rgba(0,0,0,0.55);
+}
+.msg::before {
+  position: absolute; left: 12px; top: 8px;
+  font-family: "DejaVu Sans Mono", monospace; font-weight: bold;
+}
+.msg.neko {
+  align-self: flex-start;
+  color: #ff3a3a;
+  text-shadow: 0 0 12px rgba(255,30,30,0.7);
+  border-left: 3px solid rgba(255,46,46,0.6);
+}
+.msg.neko::before { content: "⟁"; color: #ff6b6b; }
+.msg.player {
+  align-self: flex-end; text-align: right;
+  padding: 8px 36px 8px 14px;
+  color: #6cff9e;
+  text-shadow: 0 0 12px rgba(57,255,140,0.7);
+  border-right: 3px solid rgba(57,255,140,0.6);
+}
+.msg.player::before { content: "›"; left: auto; right: 12px; color: #6cff9e; }
+.msg.neko.neko-dark { animation: neko-dark-flicker 1.7s infinite; }
+
+.neko-input-row { display: flex; gap: 10px; align-items: center; justify-content: center; }
 .neko-input-row[hidden] { display: none; }
-/* Игрок «говорит» зелёным — в противовес красному «Некому». */
+/* поле игрока — зелёное (в противовес красному «Некому») */
 #neko-input {
   background: #000a04;
   border: 1px solid rgba(57,255,140,0.5);
   color: #6cff9e;
   font-family: var(--serif);
-  font-size: clamp(20px, 3vh, 32px);
+  font-size: clamp(18px, 2.6vh, 28px);
   text-align: center;
   padding: 0.4em 0.8em;
   border-radius: 8px;
@@ -332,23 +369,6 @@ html, body {
 }
 #neko-input::placeholder { color: rgba(108,255,158,0.4); }
 #neko-input:focus { border-color: #39ff8c; box-shadow: inset 0 0 24px rgba(57,255,140,0.4); }
-
-/* Эхо ответа игрока — зелёное и чуть подсвеченное. */
-.neko-player {
-  margin: 0;
-  min-height: 0;
-  max-width: 880px;
-  text-align: center;
-  font-family: var(--serif);
-  font-size: clamp(18px, 2.6vw, 30px);
-  line-height: 1.4;
-  color: #6cff9e;
-  text-shadow: 0 0 12px rgba(57,255,140,0.75), 0 0 28px rgba(57,255,140,0.4);
-  letter-spacing: 0.03em;
-  opacity: 0;
-  transition: opacity .35s ease;
-}
-.neko-player.show { opacity: 0.95; }
 #neko-send {
   background: none; border: 1px solid rgba(255,46,46,0.5); color: #ff4b4b;
   font-size: clamp(20px, 3vh, 30px); border-radius: 8px; cursor: pointer; padding: 0.15em 0.55em;
@@ -631,7 +651,6 @@ html, body {
 .neko-caret { animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 /* высокая «тьма» — нервное, неровное свечение реплики «Некого» */
-.neko-line.neko-dark { animation: neko-dark-flicker 1.7s infinite; }
 @keyframes neko-dark-flicker {
   0%, 100% { opacity: 0.95; filter: none; }
   18% { opacity: 0.6; }

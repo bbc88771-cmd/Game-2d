@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Sunset of the World</title>
-  <link rel="stylesheet" href="css/menu.css?v=14" />
+  <link rel="stylesheet" href="css/menu.css?v=15" />
 </head>
 <body>
   <!-- ============ ГЛАВНОЕ МЕНЮ ============ -->
@@ -51,10 +51,9 @@
   <div id="neko-intro" class="neko-intro" hidden>
     <pre class="neko-code" id="neko-code" aria-hidden="true"></pre>
     <div class="neko-dialog">
-      <p class="neko-line" id="neko-line"></p>
-      <p class="neko-player" id="neko-player" aria-live="polite"></p>
+      <div class="neko-chat" id="neko-chat" aria-live="polite"></div>
       <form class="neko-input-row" id="neko-input-row" hidden>
-        <input id="neko-input" type="text" maxlength="24" placeholder="напиши своё имя…"
+        <input id="neko-input" type="text" maxlength="80" placeholder="напиши…"
                autocomplete="off" spellcheck="false" />
         <button type="submit" id="neko-send" aria-label="Ответить">▸</button>
       </form>
@@ -76,6 +75,6 @@
     <button class="neko-skip" id="cut-skip">пропустить ▸</button>
   </div>
 
-  <script src="js/menu.js?v=14"></script>
+  <script src="js/menu.js?v=15"></script>
 </body>
 </html>
