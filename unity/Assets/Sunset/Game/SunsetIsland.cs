@@ -18,11 +18,11 @@ namespace Sunset.Game
     [DisallowMultipleComponent]
     public class SunsetIsland : MonoBehaviour
     {
-        [Tooltip("Во сколько раз увеличить фон-остров (размер игровой зоны).")]
-        public float islandScale = 3f;
+        [Tooltip("Во сколько раз увеличить остров (размер игровой зоны). Карта большая.")]
+        public float islandScale = 3.5f;
 
         [Tooltip("Сколько предметов разбросать по острову.")]
-        public int pickupCount = 6;
+        public int pickupCount = 8;
 
         private NekoPresence _neko;
         private Transform _player;
@@ -31,6 +31,7 @@ namespace Sunset.Game
         private int _total;
         private TextMeshProUGUI _hud;
         private Vector2 _boundsMin, _boundsMax;
+        private float _spriteW, _spriteH;   // размер острова в мире при масштабе 1
         private readonly System.Random _rng = new System.Random();
         private bool _wounded;
 
@@ -38,7 +39,7 @@ namespace Sunset.Game
         {
             BuildCamera(out Camera cam);
             BuildGround();
-            BuildBounds(cam);
+            BuildBoundary();
             BuildHouses();
             _player = BuildPlayer();
             BuildPickups();
@@ -79,7 +80,7 @@ namespace Sunset.Game
                 cam = go.AddComponent<Camera>();
             }
             cam.orthographic = true;
-            cam.orthographicSize = 6f;
+            cam.orthographicSize = 8f; // карта большая — показываем больше
             cam.backgroundColor = new Color(0.06f, 0.07f, 0.09f, 1f);
             cam.transform.position = new Vector3(0, 0, -10f);
         }
@@ -88,57 +89,76 @@ namespace Sunset.Game
         {
             var go = new GameObject("Ground");
             var sr = go.AddComponent<SpriteRenderer>();
-            var sprite = Resources.Load<Sprite>("Sunset/loc_start");
-            if (sprite != null) { sr.sprite = sprite; sr.color = Color.white; }
-            else { sr.sprite = MakeSprite(new Color(0.3f, 0.5f, 0.3f), 32, false); }
+            var sprite = Resources.Load<Sprite>("Sunset/island_start");
+            if (sprite != null)
+            {
+                sr.sprite = sprite; sr.color = Color.white;
+                _spriteW = sprite.bounds.size.x;
+                _spriteH = sprite.bounds.size.y;
+            }
+            else
+            {
+                sr.sprite = MakeSprite(new Color(0.3f, 0.5f, 0.3f), 32, false);
+                _spriteW = _spriteH = 1f;
+            }
             sr.sortingOrder = 0;
             go.transform.localScale = new Vector3(islandScale, islandScale, 1f);
             go.transform.position = Vector3.zero;
-        }
 
-        private void BuildBounds(Camera cam)
-        {
-            // размер фона в мире (по спрайту loc_start ~9.6×6 при ppu 100) × масштаб
-            float halfW = 9.6f * 0.5f * islandScale - 0.5f;
-            float halfH = 6f * 0.5f * islandScale - 0.5f;
+            // рамка для камеры — габариты острова в мире
+            float halfW = _spriteW * 0.5f * islandScale;
+            float halfH = _spriteH * 0.5f * islandScale;
             _boundsMin = new Vector2(-halfW, -halfH);
             _boundsMax = new Vector2(halfW, halfH);
-
-            AddWall(new Vector2(0, halfH + 0.5f), new Vector2(halfW * 2 + 2, 1));   // верх
-            AddWall(new Vector2(0, -halfH - 0.5f), new Vector2(halfW * 2 + 2, 1));  // низ
-            AddWall(new Vector2(-halfW - 0.5f, 0), new Vector2(1, halfH * 2 + 2));  // лево
-            AddWall(new Vector2(halfW + 0.5f, 0), new Vector2(1, halfH * 2 + 2));   // право
         }
 
-        private void AddWall(Vector2 pos, Vector2 size)
+        /// <summary>Граница по силуэту острова: дальше — пустота, туда не пройти.</summary>
+        private void BuildBoundary()
         {
-            var go = new GameObject("Wall");
-            go.transform.position = pos;
-            var col = go.AddComponent<BoxCollider2D>();
-            col.size = size;
+            int n = IslandStartShape.Count;
+            if (n < 3) return;
+            var go = new GameObject("IslandBoundary");
+            var pts = new Vector2[n + 1];
+            for (int i = 0; i < n; i++)
+            {
+                float u = IslandStartShape.Points[i * 2];
+                float v = IslandStartShape.Points[i * 2 + 1];
+                pts[i] = NormToWorld(u, v);
+            }
+            pts[n] = pts[0]; // замкнуть петлю
+            var edge = go.AddComponent<EdgeCollider2D>();
+            edge.points = pts;
         }
 
-        // дома-ассеты (Resources/Sunset/house_*): имя + позиция как доля от границ
-        private static readonly (string name, float nx, float ny)[] HouseLayout =
+        // нормализованные (u,v) острова → мировые координаты (с учётом масштаба)
+        private Vector2 NormToWorld(float u, float v)
         {
-            ("house_tower",  -0.62f,  0.42f),
-            ("house_market",  0.00f,  0.52f),
-            ("house_barn",    0.62f,  0.42f),
-            ("house_smithy", -0.60f, -0.48f),
-            ("house_porch",   0.06f, -0.55f),
-            ("house_wood",    0.62f, -0.48f),
+            float x = (u - 0.5f) * _spriteW * islandScale;
+            float y = (0.5f - v) * _spriteH * islandScale; // v идёт вниз, мир — вверх
+            return new Vector2(x, y);
+        }
+
+        // дома-ассеты: имя + позиция в нормализованных координатах острова (на суше)
+        private static readonly (string name, float u, float v)[] HouseLayout =
+        {
+            ("house_tower",  0.42f, 0.22f),
+            ("house_market", 0.55f, 0.33f),
+            ("house_barn",   0.30f, 0.30f),
+            ("house_smithy", 0.30f, 0.66f),
+            ("house_porch",  0.52f, 0.74f),
+            ("house_wood",   0.66f, 0.62f),
         };
 
         private void BuildHouses()
         {
             foreach (var h in HouseLayout)
             {
+                if (!IslandStartShape.Contains(h.u, h.v)) continue; // только на суше
                 var sprite = Resources.Load<Sprite>("Sunset/" + h.name);
                 if (sprite == null) continue;
 
                 var go = new GameObject(h.name);
-                float mx = (_boundsMax.x - 2f), my = (_boundsMax.y - 2f);
-                go.transform.position = new Vector3(h.nx * mx, h.ny * my, 0f);
+                go.transform.position = (Vector3)NormToWorld(h.u, h.v);
 
                 var sr = go.AddComponent<SpriteRenderer>();
                 sr.sprite = sprite;
@@ -176,7 +196,7 @@ namespace Sunset.Game
             for (int i = 0; i < _total; i++)
             {
                 var go = new GameObject("Pickup");
-                go.transform.position = RandomInBounds(1.5f);
+                go.transform.position = RandomOnLand();
                 go.transform.localScale = new Vector3(0.5f, 0.5f, 1f);
                 var sr = go.AddComponent<SpriteRenderer>();
                 sr.sprite = MakeSprite(new Color(1f, 0.82f, 0.3f), 24, false);
@@ -191,7 +211,7 @@ namespace Sunset.Game
         private Transform BuildEnemy(Transform target)
         {
             var go = new GameObject("Enemy");
-            go.transform.position = RandomInBounds(4f);
+            go.transform.position = RandomOnLand();
             var sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = MakeSprite(new Color(0.85f, 0.3f, 0.3f), 30, false);
             sr.sortingOrder = 10;
@@ -255,11 +275,17 @@ namespace Sunset.Game
 
         // ---------- утилиты ----------
 
-        private Vector3 RandomInBounds(float margin)
+        // случайная точка НА СУШЕ острова (через силуэт IslandStartShape)
+        private Vector3 RandomOnLand()
         {
-            float x = Mathf.Lerp(_boundsMin.x + margin, _boundsMax.x - margin, (float)_rng.NextDouble());
-            float y = Mathf.Lerp(_boundsMin.y + margin, _boundsMax.y - margin, (float)_rng.NextDouble());
-            return new Vector3(x, y, 0f);
+            for (int i = 0; i < 64; i++)
+            {
+                float u = 0.1f + 0.8f * (float)_rng.NextDouble();
+                float v = 0.1f + 0.8f * (float)_rng.NextDouble();
+                if (IslandStartShape.Contains(u, v))
+                    return (Vector3)NormToWorld(u, v);
+            }
+            return Vector3.zero; // запас: центр острова
         }
 
         /// <summary>Сплошной спрайт-заглушка (квадрат или круг), 1×1 мир-единица.</summary>
