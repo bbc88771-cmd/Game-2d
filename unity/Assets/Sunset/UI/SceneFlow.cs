@@ -16,6 +16,7 @@ namespace Sunset.UI
     {
         public const string MainMenu = "MainMenu";
         public const string Dialogue = "Dialogue";
+        public const string Difficulty = "Difficulty";
         public const string Cutscene = "Cutscene";
         public const string Lobby = "Lobby";
         public const string HeroSelect = "HeroSelect";

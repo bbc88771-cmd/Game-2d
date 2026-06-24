@@ -20,7 +20,20 @@ namespace Sunset.EditorTools
         private const string MenuPath = SceneDir + "/MainMenu.unity";
         private const string LobbyPath = SceneDir + "/Lobby.unity";
         private const string HeroPath = SceneDir + "/HeroSelect.unity";
+        private const string DifficultyPath = SceneDir + "/Difficulty.unity";
         private const string RedCodePath = SceneDir + "/RedCode.unity";
+
+        [MenuItem("Sunset/Build Difficulty Scene")]
+        public static void BuildDifficultyScene()
+        {
+            BuildScene<SunsetDifficultySelect>("SunsetDifficultySelect", DifficultyPath);
+            AssetDatabase.Refresh();
+            Debug.Log("[Sunset] Сцена выбора сложности собрана: " + DifficultyPath + ". Нажми Play.");
+            EditorUtility.DisplayDialog("Sunset",
+                "Сцена выбора сложности собрана:\n" + DifficultyPath +
+                "\n\nЭто шаг новой игры между интро «Некого» и катсценой.\n\n" +
+                "Если текст не виден — импортируй TMP Essentials:\nWindow → TextMeshPro → Import TMP Essential Resources.\nЗатем нажми Play.", "Ок");
+        }
 
         /// <summary>Собирает сцену с одним объектом-компонентом без диалога.</summary>
         private static void BuildScene<T>(string objectName, string path) where T : Component
@@ -37,11 +50,12 @@ namespace Sunset.EditorTools
             // порядок в Build Settings: первым — главное меню (точка входа)
             BuildScene<SunsetMainMenu>("SunsetMainMenu", MenuPath);
             BuildScene<SunsetDialogue>("SunsetDialogue", ScenePath);
+            BuildScene<SunsetDifficultySelect>("SunsetDifficultySelect", DifficultyPath);
             BuildScene<SunsetCutscene>("SunsetCutscene", CutscenePath);
             BuildScene<SunsetLobby>("SunsetLobby", LobbyPath);
             BuildScene<SunsetHeroSelect>("SunsetHeroSelect", HeroPath);
 
-            var paths = new[] { MenuPath, ScenePath, CutscenePath, LobbyPath, HeroPath };
+            var paths = new[] { MenuPath, ScenePath, DifficultyPath, CutscenePath, LobbyPath, HeroPath };
             var list = new List<EditorBuildSettingsScene>();
             foreach (var p in paths) list.Add(new EditorBuildSettingsScene(p, true));
             EditorBuildSettings.scenes = list.ToArray();
@@ -50,7 +64,7 @@ namespace Sunset.EditorTools
             Debug.Log("[Sunset] Собраны все сцены и прописаны в Build Settings (вход — MainMenu).");
             EditorUtility.DisplayDialog("Sunset",
                 "Собран весь поток игры и прописан в Build Settings:\n\n" +
-                "MainMenu → (Новая игра) → Dialogue → (далее) → Cutscene → HeroSelect → меню\n" +
+                "MainMenu → (Новая игра) → Dialogue → (далее) → Difficulty → Cutscene → HeroSelect → меню\n" +
                 "MainMenu → (Лобби) → Lobby → (старт) → Cutscene → HeroSelect\n\n" +
                 "Открой сцену MainMenu и нажми Play.\n" +
                 "Если текст не виден — Window → TextMeshPro → Import TMP Essential Resources.", "Ок");

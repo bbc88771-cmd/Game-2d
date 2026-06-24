@@ -25,8 +25,8 @@ namespace Sunset.UI
         [Tooltip("Полноэкранный «красный код» + случайные сканы игрока (как в вебе).")]
         public bool enableRedCode = true;
 
-        [Tooltip("Сцена по кнопке «далее ▸» (пусто — кнопку не показывать). По умолчанию — катсцена.")]
-        public string nextScene = SceneFlow.Cutscene;
+        [Tooltip("Сцена по кнопке «далее ▸» (пусто — кнопку не показывать). По умолчанию — выбор сложности.")]
+        public string nextScene = SceneFlow.Difficulty;
 
         private NekoState _state;
         private NekoBrain _brain;
