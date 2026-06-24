@@ -39,6 +39,7 @@ namespace Sunset.Game
             BuildCamera(out Camera cam);
             BuildGround();
             BuildBounds(cam);
+            BuildHouses();
             _player = BuildPlayer();
             BuildPickups();
             _enemy = BuildEnemy(_player);
@@ -115,6 +116,40 @@ namespace Sunset.Game
             go.transform.position = pos;
             var col = go.AddComponent<BoxCollider2D>();
             col.size = size;
+        }
+
+        // дома-ассеты (Resources/Sunset/house_*): имя + позиция как доля от границ
+        private static readonly (string name, float nx, float ny)[] HouseLayout =
+        {
+            ("house_tower",  -0.62f,  0.42f),
+            ("house_market",  0.00f,  0.52f),
+            ("house_barn",    0.62f,  0.42f),
+            ("house_smithy", -0.60f, -0.48f),
+            ("house_porch",   0.06f, -0.55f),
+            ("house_wood",    0.62f, -0.48f),
+        };
+
+        private void BuildHouses()
+        {
+            foreach (var h in HouseLayout)
+            {
+                var sprite = Resources.Load<Sprite>("Sunset/" + h.name);
+                if (sprite == null) continue;
+
+                var go = new GameObject(h.name);
+                float mx = (_boundsMax.x - 2f), my = (_boundsMax.y - 2f);
+                go.transform.position = new Vector3(h.nx * mx, h.ny * my, 0f);
+
+                var sr = go.AddComponent<SpriteRenderer>();
+                sr.sprite = sprite;
+                sr.sortingOrder = 6; // под игроком (10): игрок проходит перед домом
+
+                // коллайдер-«фундамент» у основания, чтобы нельзя было пройти сквозь дом
+                float w = sprite.bounds.size.x, hgt = sprite.bounds.size.y;
+                var col = go.AddComponent<BoxCollider2D>();
+                col.size = new Vector2(w * 0.7f, hgt * 0.28f);
+                col.offset = new Vector2(0f, -hgt * 0.5f + hgt * 0.16f);
+            }
         }
 
         private Transform BuildPlayer()
