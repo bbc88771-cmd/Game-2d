@@ -29,6 +29,9 @@ namespace Sunset.Core
         public long metAtUnix;
         public long lastSeenUnix;
 
+        /// <summary>Как игрок ушёл в прошлый раз: "peek" (заглянул и ушёл) или "played".</summary>
+        public string lastExit;
+
         /// <summary>Сколько локаций открыто в одиночной игре (1 = только стартовая).</summary>
         public int unlockedLocations = 1;
 

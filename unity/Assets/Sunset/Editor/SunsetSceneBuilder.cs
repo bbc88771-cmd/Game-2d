@@ -16,6 +16,27 @@ namespace Sunset.EditorTools
         private const string SceneDir = "Assets/Sunset/Scenes";
         private const string ScenePath = SceneDir + "/Dialogue.unity";
         private const string CutscenePath = SceneDir + "/Cutscene.unity";
+        private const string MenuPath = SceneDir + "/MainMenu.unity";
+
+        [MenuItem("Sunset/Build Main Menu Scene")]
+        public static void BuildMainMenuScene()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+
+            var go = new GameObject("SunsetMainMenu");
+            go.AddComponent<SunsetMainMenu>();
+
+            if (!Directory.Exists(SceneDir)) Directory.CreateDirectory(SceneDir);
+            EditorSceneManager.SaveScene(scene, MenuPath);
+            AssetDatabase.Refresh();
+
+            Debug.Log("[Sunset] Сцена главного меню собрана: " + MenuPath + ". Нажми Play.");
+            EditorUtility.DisplayDialog("Sunset",
+                "Сцена главного меню собрана:\n" + MenuPath +
+                "\n\nФон и логотип ищутся в Resources/Sunset/ (menu_bg, logo).\n" +
+                "Без них фон будет тёмным, а заголовок — текстом.\n\n" +
+                "Если текст не виден — импортируй TMP Essentials:\nWindow → TextMeshPro → Import TMP Essential Resources.\nЗатем нажми Play.", "Ок");
+        }
 
         [MenuItem("Sunset/Build Dialogue Scene")]
         public static void BuildDialogueScene()
