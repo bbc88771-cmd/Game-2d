@@ -17,6 +17,28 @@ namespace Sunset.EditorTools
         private const string ScenePath = SceneDir + "/Dialogue.unity";
         private const string CutscenePath = SceneDir + "/Cutscene.unity";
         private const string MenuPath = SceneDir + "/MainMenu.unity";
+        private const string LobbyPath = SceneDir + "/Lobby.unity";
+
+        [MenuItem("Sunset/Build Lobby Scene")]
+        public static void BuildLobbyScene()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+
+            var go = new GameObject("SunsetLobby");
+            go.AddComponent<SunsetLobby>();
+
+            if (!Directory.Exists(SceneDir)) Directory.CreateDirectory(SceneDir);
+            EditorSceneManager.SaveScene(scene, LobbyPath);
+            AssetDatabase.Refresh();
+
+            Debug.Log("[Sunset] Сцена лобби собрана: " + LobbyPath + ". Нажми Play.");
+            EditorUtility.DisplayDialog("Sunset",
+                "Сцена лобби собрана:\n" + LobbyPath +
+                "\n\nКартинки локаций ищутся в Resources/Sunset/ (loc_start, loc_snow, loc_dead, loc_swamp, loc_magic).\n" +
+                "Без них карточка будет тёмной. «Друзья» подключаются по таймеру со случайным прогрессом —\n" +
+                "это наглядно показывает блокировку старта (гейт).\n\n" +
+                "Если текст не виден — импортируй TMP Essentials:\nWindow → TextMeshPro → Import TMP Essential Resources.\nЗатем нажми Play.", "Ок");
+        }
 
         [MenuItem("Sunset/Build Main Menu Scene")]
         public static void BuildMainMenuScene()
