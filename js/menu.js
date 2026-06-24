@@ -1924,6 +1924,18 @@
       desc: "Магия и источник: единороги, леприкон, пикси. Боссы: рогатая жаба, воробей в броне." },
   ];
 
+  // Прогресс одиночной игры: сколько локаций игрок открыл (1 = только стартовая).
+  // В полной игре растёт после победы над боссами локации; здесь — сохраняется
+  // и доступен для теста степпером в лобби (только у хоста).
+  const PROGRESS_KEY = "sotw_progress";
+  function loadProgress() {
+    try { return { unlockedLocations: 1, ...JSON.parse(localStorage.getItem(PROGRESS_KEY) || "{}") }; }
+    catch { return { unlockedLocations: 1 }; }
+  }
+  let progress = loadProgress();
+  function saveProgress() { try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch {} }
+  function hostUnlockedCount() { return Math.max(1, Math.min(LOCATIONS.length, progress.unlockedLocations | 0)); }
+
   let modsState = [
     { name: "Расширенный бестиарий", sub: "Доп. мобы и дроп-таблицы", on: true, friend: false },
     { name: "Больше построек", sub: "+12 зданий и декор", on: false, friend: false },
@@ -1932,6 +1944,7 @@
   ];
 
   let lobby = null;
+  let selectedLocation = 0;             // выбранная в карусели локация (для старта игры)
   const lobbyEl = () => document.getElementById("lobby-screen");
   const MAX_PLAYERS = 5;
 
@@ -1974,7 +1987,7 @@
   }
 
   function openLobby(mode, code) {
-    lobby = { mode, code, players: [{ name: playerName || "Вы", host: true }], joinTimer: null };
+    lobby = { mode, code, players: [{ name: playerName || "Вы", host: true, unlocked: hostUnlockedCount() }], joinTimer: null, locIndex: 0 };
     document.getElementById("menu-screen").classList.remove("is-active");
     const scr = lobbyEl();
     scr.classList.add("is-active");
@@ -1991,7 +2004,23 @@
     const start = scr.querySelector("#startGame");
     if (start) start.addEventListener("click", startFromLobby);
 
-    renderPlayers(); renderDifficulty(); renderMods();
+    // Карусель локаций: видна всегда одна картинка, листаем стрелками/точками.
+    const locPrev = scr.querySelector("#locPrev"), locNext = scr.querySelector("#locNext");
+    if (locPrev) locPrev.addEventListener("click", () => { lobby.locIndex = Math.max(0, (lobby.locIndex || 0) - 1); renderLocation(); });
+    if (locNext) locNext.addEventListener("click", () => { lobby.locIndex = Math.min(LOCATIONS.length - 1, (lobby.locIndex || 0) + 1); renderLocation(); });
+    const dots = scr.querySelector("#locDots");
+    if (dots) dots.addEventListener("click", (e) => { const b = e.target.closest("[data-dot]"); if (!b) return; lobby.locIndex = +b.dataset.dot; renderLocation(); });
+    // Степпер прогресса (только хост) — для теста разблокировки локаций.
+    const progWrap = scr.querySelector(".loc-progress");
+    if (progWrap) progWrap.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-prog]"); if (!b) return;
+      progress.unlockedLocations = Math.max(1, Math.min(LOCATIONS.length, (progress.unlockedLocations | 0) + (+b.dataset.prog)));
+      saveProgress();
+      const host = lobby.players.find((p) => p.host); if (host) host.unlocked = hostUnlockedCount();
+      renderLocation();
+    });
+
+    renderPlayers(); renderDifficulty(); renderMods(); renderLocation();
     scheduleJoins();
 
     // Привязка чата
@@ -2058,19 +2087,22 @@
           </div>
         </div>
         <aside class="lobby-right">
-          <h2>Локации</h2>
-          <p class="muted">5 островов — следующий открывается после победы над боссами текущего.</p>
-          <div class="loc-grid">
-            ${LOCATIONS.map((l) => `
-              <article class="loc-card">
-                <img src="${l.img}" alt="${l.name}" loading="lazy">
-                <div class="loc-meta">
-                  <h3>${l.name}</h3>
-                  <span class="loc-who">${l.who}</span>
-                  <p>${l.desc}</p>
-                </div>
-              </article>`).join("")}
+          <h2>Локация</h2>
+          <p class="muted">5 островов — следующий открывается после победы над боссами предыдущего. Листай, чтобы выбрать.</p>
+          <div class="loc-carousel">
+            <button class="loc-arrow" id="locPrev" aria-label="Предыдущая локация">‹</button>
+            <article class="loc-card big" id="locCard"></article>
+            <button class="loc-arrow" id="locNext" aria-label="Следующая локация">›</button>
           </div>
+          <div class="loc-dots" id="locDots"></div>
+          <p class="loc-gate" id="locGate"></p>
+          ${mode === "host" ? `
+          <div class="loc-progress" title="Сколько локаций ты открыл в одиночной игре">
+            <span>Открыто локаций:</span>
+            <button class="prog-btn" data-prog="-1" aria-label="Меньше">−</button>
+            <b id="progN">1</b>
+            <button class="prog-btn" data-prog="1" aria-label="Больше">+</button>
+          </div>` : ""}
         </aside>
       </div>
     </div>`;
@@ -2112,6 +2144,65 @@
     if (pc) pc.textContent = `${lobby.players.length}/${MAX_PLAYERS}`;
   }
 
+  // Локация доступна игроку, если он открыл хотя бы (index+1) локаций.
+  // Условие старта: выбранную локацию должны иметь открытой ВСЕ игроки.
+  function lobbyGate() {
+    const i = lobby ? (lobby.locIndex || 0) : 0;
+    const loc = LOCATIONS[i];
+    const host = (lobby && lobby.players.find((p) => p.host)) || { unlocked: 1 };
+    if ((host.unlocked || 1) <= i) {
+      return { ok: false, msg: `🔒 Ты ещё не открыл «${loc.name}». Пройди предыдущие локации в одиночной игре.` };
+    }
+    const missing = (lobby ? lobby.players : []).filter((p) => !p.host && (p.unlocked || 1) <= i).map((p) => p.name);
+    if (missing.length) {
+      return { ok: false, msg: `Игра не начнётся: у ${missing.join(", ")} не разблокирована локация «${loc.name}».` };
+    }
+    return { ok: true, msg: `✓ Все игроки открыли «${loc.name}». Можно начинать.` };
+  }
+
+  // Перерисовывает карусель локаций: одна картинка, точки, замок, предупреждение.
+  function renderLocation() {
+    if (!lobby) return;
+    const card = document.getElementById("locCard"); if (!card) return;
+    const total = LOCATIONS.length;
+    const i = Math.max(0, Math.min(total - 1, lobby.locIndex || 0));
+    lobby.locIndex = i;
+    const loc = LOCATIONS[i];
+    const host = lobby.players.find((p) => p.host) || { unlocked: 1 };
+    const hostHas = (host.unlocked || 1) > i;
+
+    card.className = "loc-card big" + (hostHas ? "" : " locked");
+    card.innerHTML = `
+      <div class="loc-img-wrap">
+        <img src="${loc.img}" alt="${loc.name}" loading="lazy">
+        <span class="loc-counter">${i + 1} / ${total}</span>
+        ${hostHas ? "" : '<div class="loc-lock">🔒<span>Не открыта</span></div>'}
+      </div>
+      <div class="loc-meta">
+        <h3>${loc.name}</h3>
+        <span class="loc-who">${loc.who}</span>
+        <p>${loc.desc}</p>
+      </div>`;
+
+    const dots = document.getElementById("locDots");
+    if (dots) dots.innerHTML = LOCATIONS.map((l, k) => {
+      const open = (host.unlocked || 1) > k;
+      return `<button class="loc-dot ${k === i ? "active" : ""} ${open ? "" : "locked"}" data-dot="${k}" title="${l.name}">${open ? (k + 1) : "🔒"}</button>`;
+    }).join("");
+
+    const prev = document.getElementById("locPrev"), next = document.getElementById("locNext");
+    if (prev) prev.disabled = i <= 0;
+    if (next) next.disabled = i >= total - 1;
+
+    const gate = lobbyGate();
+    const gateEl = document.getElementById("locGate");
+    if (gateEl) { gateEl.textContent = gate.msg; gateEl.className = "loc-gate " + (gate.ok ? "ok" : "bad"); }
+    const start = document.getElementById("startGame");
+    if (start) start.disabled = !gate.ok;
+    const progN = document.getElementById("progN");
+    if (progN) progN.textContent = String(host.unlocked || 1);
+  }
+
   function showWhisper(text) {
     // Показываем в старом элементе (совместимость) и в новом чат-логе
     const el = document.getElementById("nekoWhisper");
@@ -2141,9 +2232,10 @@
       if (!lobby || !lobbyEl().classList.contains("is-active")) return;
       if (lobby.players.length >= MAX_PLAYERS) return;
       const idx = lobby.players.length - 1;
-      const joined = { name: pool[idx] || "Игрок", host: false };
+      // у друга свой прогресс — случайно 1..4 локаций (демонстрирует блокировку старта)
+      const joined = { name: pool[idx] || "Игрок", host: false, unlocked: 1 + Math.floor(Math.random() * (LOCATIONS.length - 1)) };
       lobby.players.push(joined);
-      renderPlayers();
+      renderPlayers(); renderLocation();   // новый игрок мог заблокировать выбранную локацию
       // Вступительная реплика нового игрока в чат
       lobbyChatAdd(joined.name, PLAYER_GREETS[idx % PLAYER_GREETS.length], "other");
 
@@ -2224,6 +2316,9 @@
   }
 
   function startFromLobby() {
+    const gate = lobbyGate();                 // нельзя стартовать, если локацию открыли не все
+    if (!gate.ok) { renderLocation(); return; }
+    selectedLocation = lobby ? (lobby.locIndex || 0) : 0;
     closeLobby({ starting: true });
     // имя уже названо при создании лобби, сложность выбрана в лобби →
     // теперь «Некий» рассказывает отложенную историю мира, затем выбор героя
