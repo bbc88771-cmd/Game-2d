@@ -76,7 +76,14 @@ namespace Sunset.UI
             _neko = SunsetSave.Load();
             _mods = GameMods.Defaults();
 
+            // режим/код приходят из меню (Создать лобби / Ввести код); иначе — поля компонента
+            string mode = PlayerPrefs.GetString("sunset_lobby_mode", "");
+            if (mode == "host") isHost = true;
+            else if (mode == "guest") isHost = false;
+            string passedCode = PlayerPrefs.GetString("sunset_lobby_code", "");
+            if (!string.IsNullOrEmpty(passedCode)) code = passedCode;
             if (string.IsNullOrEmpty(code)) code = LobbyCode.Generate(_rng);
+
             int unlocked = Mathf.Clamp(_neko.unlockedLocations, 1, GameLocations.Count);
             var host = new LobbyPlayer(string.IsNullOrEmpty(_neko.knownName) ? "Вы" : _neko.knownName, true, unlocked);
             _lobby = new LobbyState(isHost ? LobbyMode.Host : LobbyMode.Guest, code, host);

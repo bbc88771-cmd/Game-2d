@@ -125,11 +125,41 @@ namespace Sunset.UI
             SceneFlow.Go(SceneFlow.HeroSelect);
         }
 
-        private void OnLobby(string title)
+        private void OnCreateLobby()
         {
             _sessionLaunched = true;
+            PlayerPrefs.SetString("sunset_lobby_mode", "host");
+            PlayerPrefs.SetString("sunset_lobby_code", "");
+            PlayerPrefs.Save();
             RecordExit();
             SceneFlow.Go(SceneFlow.Lobby);
+        }
+
+        private void OnJoinLobby()
+        {
+            var body = NewVerticalGroup();
+            AddParagraph(body.transform, "Введите код лобби друга, чтобы войти в общий мир.", ColGold);
+            var input = AddInputField(body.transform, "КОД (например ABC123)");
+            input.characterLimit = 6;
+            var status = AddParagraphRef(body.transform, "", ColEmber);
+
+            AddPrimaryButton(body.transform, "Войти", () =>
+            {
+                string code = LobbyCode.Normalize(input.text);
+                if (!LobbyCode.IsValid(code))
+                {
+                    status.text = "Введите корректный код (минимум 4 символа).";
+                    return;
+                }
+                _sessionLaunched = true;
+                PlayerPrefs.SetString("sunset_lobby_mode", "guest");
+                PlayerPrefs.SetString("sunset_lobby_code", code);
+                PlayerPrefs.Save();
+                RecordExit();
+                SceneFlow.Go(SceneFlow.Lobby);
+            });
+            AddPrimaryButton(body.transform, "Отмена", CloseModal);
+            OpenModal("Ввести код", body);
         }
 
         // ---------- настройки ----------
@@ -330,8 +360,8 @@ namespace Sunset.UI
 
             AddMenuButton(col.transform, "Новая игра", OnNewGame);
             _continueBtn = AddMenuButton(col.transform, "Продолжить", OnContinue);
-            AddMenuButton(col.transform, "Создать лобби", () => OnLobby("Создать лобби"));
-            AddMenuButton(col.transform, "Ввести код", () => OnLobby("Ввести код"));
+            AddMenuButton(col.transform, "Создать лобби", OnCreateLobby);
+            AddMenuButton(col.transform, "Ввести код", OnJoinLobby);
             AddMenuButton(col.transform, "Настройки", OpenSettings);
             AddMenuButton(col.transform, "Дневник", OpenJournal);
             AddMenuButton(col.transform, "Выход", OpenExit);
@@ -466,6 +496,53 @@ namespace Sunset.UI
 
         private void AddHint(Transform parent, string text)
             => AddParagraph(parent, text, new Color(0.95f, 0.91f, 0.81f, 0.55f), italic: true);
+
+        // Абзац с возвратом ссылки (для статус-строк, которые меняются).
+        private TextMeshProUGUI AddParagraphRef(Transform parent, string text, Color color)
+        {
+            var go = NewUi("P", parent);
+            go.AddComponent<LayoutElement>().minHeight = 32;
+            var t = go.AddComponent<TextMeshProUGUI>();
+            t.text = text; t.fontSize = 22; t.color = color;
+            t.alignment = TextAlignmentOptions.TopLeft; t.enableWordWrapping = true;
+            ApplyFont(t);
+            return t;
+        }
+
+        // Поле ввода (TMP) для модалок (код лобби и т.п.).
+        private TMP_InputField AddInputField(Transform parent, string placeholder)
+        {
+            var row = NewUi("InputRow", parent);
+            row.AddComponent<LayoutElement>().preferredHeight = 60;
+            row.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.08f);
+            var input = row.AddComponent<TMP_InputField>();
+            input.lineType = TMP_InputField.LineType.SingleLine;
+
+            var area = NewUi("Text Area", row.transform);
+            Stretch(area, Vector2.zero, Vector2.one, new Vector2(16, 6), new Vector2(-16, -6));
+            area.AddComponent<RectMask2D>();
+
+            var ph = NewUi("Placeholder", area.transform);
+            Stretch(ph, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var phT = ph.AddComponent<TextMeshProUGUI>();
+            phT.text = placeholder; phT.fontSize = 24; phT.fontStyle = FontStyles.Italic;
+            phT.color = new Color(1f, 1f, 1f, 0.35f); phT.alignment = TextAlignmentOptions.MidlineLeft;
+            ApplyFont(phT);
+
+            var txt = NewUi("Text", area.transform);
+            Stretch(txt, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var txtT = txt.AddComponent<TextMeshProUGUI>();
+            txtT.fontSize = 24; txtT.color = ColGold; txtT.alignment = TextAlignmentOptions.MidlineLeft;
+            ApplyFont(txtT);
+
+            input.textViewport = area.GetComponent<RectTransform>();
+            input.textComponent = txtT;
+            input.placeholder = phT;
+            input.pointSize = 24;
+            input.characterValidation = TMP_InputField.CharacterValidation.None;
+            if (TMP_Settings.defaultFontAsset != null) input.fontAsset = TMP_Settings.defaultFontAsset;
+            return input;
+        }
 
         private Slider AddSlider(Transform parent, string label, int value)
         {
