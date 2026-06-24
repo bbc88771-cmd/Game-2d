@@ -22,7 +22,22 @@ namespace Sunset.EditorTools
         private const string HeroPath = SceneDir + "/HeroSelect.unity";
         private const string DifficultyPath = SceneDir + "/Difficulty.unity";
         private const string WorldPath = SceneDir + "/World.unity";
+        private const string IslandPath = SceneDir + "/Island.unity";
         private const string RedCodePath = SceneDir + "/RedCode.unity";
+
+        [MenuItem("Sunset/Build Island Scene")]
+        public static void BuildIslandScene()
+        {
+            BuildScene<Sunset.Game.SunsetIsland>("SunsetIsland", IslandPath);
+            AssetDatabase.Refresh();
+            Debug.Log("[Sunset] Сцена острова (прототип) собрана: " + IslandPath + ". Нажми Play.");
+            EditorUtility.DisplayDialog("Sunset",
+                "Прототип стартового острова собран:\n" + IslandPath +
+                "\n\nВид сверху: WASD/стрелки — движение, собирай золотое, красный преследует, Esc — в меню.\n" +
+                "Графика временная (генерируется из кода); фон — спрайт loc_start.\n" +
+                "Карту/персонажей/физику меняем по отдельности.\n\n" +
+                "Если текст HUD не виден — импортируй TMP Essentials:\nWindow → TextMeshPro → Import TMP Essential Resources.\nЗатем нажми Play.", "Ок");
+        }
 
         [MenuItem("Sunset/Build World Scene")]
         public static void BuildWorldScene()
@@ -69,8 +84,9 @@ namespace Sunset.EditorTools
             BuildScene<SunsetLobby>("SunsetLobby", LobbyPath);
             BuildScene<SunsetHeroSelect>("SunsetHeroSelect", HeroPath);
             BuildScene<SunsetWorldStub>("SunsetWorldStub", WorldPath);
+            BuildScene<Sunset.Game.SunsetIsland>("SunsetIsland", IslandPath);
 
-            var paths = new[] { MenuPath, ScenePath, DifficultyPath, CutscenePath, LobbyPath, HeroPath, WorldPath };
+            var paths = new[] { MenuPath, ScenePath, DifficultyPath, CutscenePath, LobbyPath, HeroPath, WorldPath, IslandPath };
             var list = new List<EditorBuildSettingsScene>();
             foreach (var p in paths) list.Add(new EditorBuildSettingsScene(p, true));
             EditorBuildSettings.scenes = list.ToArray();
@@ -79,8 +95,8 @@ namespace Sunset.EditorTools
             Debug.Log("[Sunset] Собраны все сцены и прописаны в Build Settings (вход — MainMenu).");
             EditorUtility.DisplayDialog("Sunset",
                 "Собран весь поток игры и прописан в Build Settings:\n\n" +
-                "MainMenu → (Новая игра) → Dialogue → (далее) → Difficulty → Cutscene → HeroSelect → World → меню\n" +
-                "MainMenu → (Лобби) → Lobby → (старт) → Cutscene → HeroSelect → World\n\n" +
+                "MainMenu → (Новая игра) → Dialogue → (далее) → Difficulty → Cutscene → HeroSelect → World → Island\n" +
+                "MainMenu → (Лобби) → Lobby → (старт) → Cutscene → HeroSelect → World → (Войти в мир) → Island\n\n" +
                 "Открой сцену MainMenu и нажми Play.\n" +
                 "Если текст не виден — Window → TextMeshPro → Import TMP Essential Resources.", "Ок");
         }

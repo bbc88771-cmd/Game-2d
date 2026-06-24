@@ -21,6 +21,7 @@ namespace Sunset.UI
         public const string Lobby = "Lobby";
         public const string HeroSelect = "HeroSelect";
         public const string World = "World";
+        public const string Island = "Island";
 
         public static void Go(string scene)
         {

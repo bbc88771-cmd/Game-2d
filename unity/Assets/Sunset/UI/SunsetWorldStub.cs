@@ -118,12 +118,19 @@ namespace Sunset.UI
                 : $"Прогресс секретной способности: пройдено {done}/4 сложностей.";
             AddText(card.transform, note, 22, secret ? ColEmber : ColMuted, TextAlignmentOptions.Center, 40);
 
+            // кнопка «Войти в мир →» — прототип стартового острова
+            var enter = NewUi("Enter", card.transform);
+            enter.AddComponent<LayoutElement>().preferredHeight = 70;
+            enter.AddComponent<Image>().color = new Color(1f, 0.54f, 0.17f, 0.3f);
+            enter.AddComponent<Button>().onClick.AddListener(() => SceneFlow.Go(SceneFlow.Island));
+            AddText(enter.transform, "Войти в мир →", 30, ColGold, TextAlignmentOptions.Center, 0, stretch: true);
+
             // кнопка «В меню»
             var btn = NewUi("ToMenu", card.transform);
-            btn.AddComponent<LayoutElement>().preferredHeight = 66;
-            btn.AddComponent<Image>().color = new Color(1f, 0.54f, 0.17f, 0.22f);
+            btn.AddComponent<LayoutElement>().preferredHeight = 60;
+            btn.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.08f);
             btn.AddComponent<Button>().onClick.AddListener(() => SceneFlow.Go(SceneFlow.MainMenu));
-            AddText(btn.transform, "В меню", 28, ColGold, TextAlignmentOptions.Center, 0, stretch: true);
+            AddText(btn.transform, "В меню", 26, ColGold, TextAlignmentOptions.Center, 0, stretch: true);
 
             // подсказка про присутствие «Некого» в мире (демо-триггеры)
             var hint = NewUi("Hint", _root);
