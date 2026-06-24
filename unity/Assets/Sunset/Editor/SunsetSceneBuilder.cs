@@ -18,6 +18,27 @@ namespace Sunset.EditorTools
         private const string CutscenePath = SceneDir + "/Cutscene.unity";
         private const string MenuPath = SceneDir + "/MainMenu.unity";
         private const string LobbyPath = SceneDir + "/Lobby.unity";
+        private const string HeroPath = SceneDir + "/HeroSelect.unity";
+
+        [MenuItem("Sunset/Build Hero Select Scene")]
+        public static void BuildHeroSelectScene()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+
+            var go = new GameObject("SunsetHeroSelect");
+            go.AddComponent<SunsetHeroSelect>();
+
+            if (!Directory.Exists(SceneDir)) Directory.CreateDirectory(SceneDir);
+            EditorSceneManager.SaveScene(scene, HeroPath);
+            AssetDatabase.Refresh();
+
+            Debug.Log("[Sunset] Сцена выбора героя собрана: " + HeroPath + ". Нажми Play.");
+            EditorUtility.DisplayDialog("Sunset",
+                "Сцена выбора героя собрана:\n" + HeroPath +
+                "\n\nПортреты ищутся в Resources/Sunset/ (hero_tessi, hero_amira, hero_swordsman, hero_kaijo, hero_walter).\n" +
+                "Секретная 5-я способность открывается после прохождения на всех 4 сложностях.\n\n" +
+                "Если текст не виден — импортируй TMP Essentials:\nWindow → TextMeshPro → Import TMP Essential Resources.\nЗатем нажми Play.", "Ок");
+        }
 
         [MenuItem("Sunset/Build Lobby Scene")]
         public static void BuildLobbyScene()
