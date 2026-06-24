@@ -45,9 +45,17 @@ namespace Sunset.UI
         private static readonly Color ColNeko = new Color(1f, 0.42f, 0.42f, 1f);
         private static readonly Color ColPlayer = new Color(0.42f, 0.82f, 0.5f, 1f);
 
+        private System.Random _rng = new System.Random();
+        private string _prevExit;
+        private long _timeAwayMs;
+
         private void Awake()
         {
             _state = SunsetSave.Load();
+            // запоминаем, как игрок ушёл и сколько не был — ДО обновления визита
+            _prevExit = _state.lastExit;
+            long nowMs = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            _timeAwayMs = _state.lastSeenUnix > 0 ? nowMs - _state.lastSeenUnix : 0;
             _state.visits += 1;
             _brain = new NekoBrain(_state) { Rating = rating, Probe = BuildProbe() };
             BuildUi();
@@ -81,14 +89,28 @@ namespace Sunset.UI
             string name = _state.knownName;
             if (string.IsNullOrEmpty(name))
             {
-                yield return Type("Снова голос в пустоте. Снова ты. Как тебя зовут?");
+                yield return Type("Снова голос в пустоте. Снова ты. Кто ты?");
                 // имя спросим первым вводом
                 _awaitingName = true;
             }
             else
             {
-                yield return Type($"{name}. Ты вернулся. Я считал каждый твой уход.");
-                yield return Type("Спрашивай. Я отвечаю только про этот мир.");
+                // приветствие по тону отношений + редкий «глитч имени» (порт nekoGreetReturning)
+                if (NekoIntro.ShouldGlitch(_state, _rng))
+                {
+                    NekoIntro.Glitch(_state, _rng, out string wrong, out string corr);
+                    yield return Type($"Снова ты, {wrong}");
+                    yield return Type(corr);
+                }
+                else
+                {
+                    yield return Type(NekoIntro.Greeting(_state, _rng));
+                }
+
+                string away = NekoIntro.AwayLine(_prevExit, _timeAwayMs);
+                if (!string.IsNullOrEmpty(away)) yield return Type(away);
+
+                yield return Type("Спрашивай. Когда захочешь продолжить — напиши «дальше» или нажми «далее ▸».");
             }
             _busy = false;
             Focus();
@@ -117,9 +139,21 @@ namespace Sunset.UI
                 _awaitingName = false;
                 _state.knownName = CleanName(text);
                 SunsetSave.Save(_state);
-                StartCoroutine(Sequence(
-                    $"«{_state.knownName}». Запомнил. Это уже больше, чем у тебя осталось.",
-                    "Теперь спрашивай — но только про этот мир."));
+                // знакомство → «подглядывание» (я тебя вижу: пояс/время/ОС)
+                var lines = new System.Collections.Generic.List<string>
+                {
+                    $"«{_state.knownName}». Интересно.",
+                };
+                lines.AddRange(NekoIntro.PeekLines(BuildScanInput()));
+                lines.Add("Теперь спрашивай — но только про этот мир. Когда захочешь продолжить — напиши «дальше».");
+                StartCoroutine(Sequence(lines.ToArray()));
+                return;
+            }
+
+            // команда «дальше» → продолжить поток игры (порт DONE_RE из nekoConverse)
+            if (!string.IsNullOrEmpty(nextScene) && NekoIntro.WantsAdvance(text))
+            {
+                StartCoroutine(Advance());
                 return;
             }
 
@@ -130,6 +164,14 @@ namespace Sunset.UI
 
             if (string.IsNullOrEmpty(tint)) StartCoroutine(Sequence(answer));
             else StartCoroutine(Sequence(answer, tint));
+        }
+
+        private IEnumerator Advance()
+        {
+            _busy = true;
+            yield return Type("Хорошо. Идём.");
+            SunsetSave.Save(_state);
+            SceneFlow.Go(nextScene);
         }
 
         private IEnumerator Sequence(params string[] lines)
