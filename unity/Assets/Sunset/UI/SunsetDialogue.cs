@@ -31,6 +31,7 @@ namespace Sunset.UI
         private NekoState _state;
         private NekoBrain _brain;
         private RedCodeBackground _code;
+        private SunsetAudio _audio;
         private Image _bgImg;
 
         private TextMeshProUGUI _chat;
@@ -60,6 +61,7 @@ namespace Sunset.UI
                 // приоткрываем фон диалога, чтобы код был виден позади чата
                 if (_bgImg != null) { var c = _bgImg.color; c.a = 0.5f; _bgImg.color = c; }
             }
+            _audio = gameObject.AddComponent<SunsetAudio>();
         }
 
         private void Start()
@@ -103,8 +105,12 @@ namespace Sunset.UI
 
             AddPlayer(text);
 
-            // «момент»: игрок спросил, видит ли его «Некий» / кто он → скан
-            if (_code != null && PlayerScan.WantsScan(text)) _code.ScanBurst();
+            // «момент»: игрок спросил, видит ли его «Некий» / кто он → скан + бип сканера
+            if (PlayerScan.WantsScan(text))
+            {
+                if (_code != null) _code.ScanBurst();
+                if (_audio != null) _audio.Tick();
+            }
 
             if (_awaitingName)
             {

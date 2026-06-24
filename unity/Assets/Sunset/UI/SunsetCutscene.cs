@@ -45,6 +45,7 @@ namespace Sunset.UI
         private Image _flash;
         private TextMeshProUGUI _caption;
         private RectTransform _embersRoot;
+        private SunsetAudio _audio;
 
         private bool _skipped;
         private bool _done;
@@ -52,6 +53,8 @@ namespace Sunset.UI
         private void Start()
         {
             BuildUi();
+            _audio = gameObject.AddComponent<SunsetAudio>();
+            _audio.StartAmbient(0.18f); // приглушённый дрон под катсцену (как в вебе)
             StartCoroutine(Play());
         }
 
@@ -80,7 +83,7 @@ namespace Sunset.UI
 
                 // вспышка на смене кадра
                 StartCoroutine(FlashOnce());
-                // TODO(audio): bell(slide.bellFreq) — озвучка/колокол переносятся отдельной фазой.
+                if (_audio != null) _audio.Bell(slide.bellFreq);
 
                 _caption.color = slide.neko ? ColNekoVoice : ColCaption;
 
@@ -116,6 +119,7 @@ namespace Sunset.UI
         {
             if (_done) return;
             _done = true;
+            if (_audio != null) _audio.StopAmbient();
             Debug.Log("[Sunset] Катсцена завершена.");
             Finished?.Invoke();
             if (!string.IsNullOrEmpty(nextScene)) SceneFlow.Go(nextScene);
