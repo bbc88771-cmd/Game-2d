@@ -26,8 +26,23 @@ namespace Sunset.UI
         private static readonly Color ColPanel = new Color(0.04f, 0.03f, 0.02f, 0.6f);
 
         private RectTransform _root;
+        private NekoPresence _neko;
+        private static readonly string[] DemoKeys = { "night", "wounded", "resource_low", "discovery", "boss", "build" };
 
-        private void Awake() => BuildUi();
+        private void Awake()
+        {
+            BuildUi();
+            // «Некий» здесь, в мире — главный канал общения: редкие реплики сами по
+            // себе и по триггерам события. (В прототипе триггеры на клавишах 1–6.)
+            _neko = gameObject.AddComponent<NekoPresence>();
+        }
+
+        private void Update()
+        {
+            if (_neko == null) return;
+            for (int i = 0; i < DemoKeys.Length; i++)
+                if (Input.GetKeyDown(KeyCode.Alpha1 + i)) _neko.Trigger(DemoKeys[i]);
+        }
 
         private void BuildUi()
         {
@@ -109,6 +124,16 @@ namespace Sunset.UI
             btn.AddComponent<Image>().color = new Color(1f, 0.54f, 0.17f, 0.22f);
             btn.AddComponent<Button>().onClick.AddListener(() => SceneFlow.Go(SceneFlow.MainMenu));
             AddText(btn.transform, "В меню", 28, ColGold, TextAlignmentOptions.Center, 0, stretch: true);
+
+            // подсказка про присутствие «Некого» в мире (демо-триггеры)
+            var hint = NewUi("Hint", _root);
+            Anchored(hint, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
+                new Vector2(0, 36), new Vector2(1200, 30));
+            var hintT = hint.AddComponent<TextMeshProUGUI>();
+            hintT.text = "«Некий» иногда заговорит сам. Клавиши 1–6 — демо-триггеры событий (ночь/рана/нехватка/находка/босс/стройка).";
+            hintT.fontSize = 17; hintT.color = new Color(0.95f, 0.91f, 0.81f, 0.4f);
+            hintT.alignment = TextAlignmentOptions.Center;
+            if (TMP_Settings.defaultFontAsset != null) hintT.font = TMP_Settings.defaultFontAsset;
         }
 
         // ---------- утилиты ----------

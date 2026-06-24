@@ -110,7 +110,9 @@ namespace Sunset.UI
                 string away = NekoIntro.AwayLine(_prevExit, _timeAwayMs);
                 if (!string.IsNullOrEmpty(away)) yield return Type(away);
 
-                yield return Type("Спрашивай. Когда захочешь продолжить — напиши «дальше» или нажми «далее ▸».");
+                // основной разговор — в игре, не здесь. Тут только короткое касание.
+                yield return Type("Не задерживайся здесь. Поговорим в пути — я найду тебя сам.");
+                yield return Type("Напиши «дальше» или нажми «далее ▸».");
             }
             _busy = false;
             Focus();
@@ -145,7 +147,9 @@ namespace Sunset.UI
                     $"«{_state.knownName}». Интересно.",
                 };
                 lines.AddRange(NekoIntro.PeekLines(BuildScanInput()));
-                lines.Add("Теперь спрашивай — но только про этот мир. Когда захочешь продолжить — напиши «дальше».");
+                // имя узнал — этого пока хватит; остальное «Некий» скажет уже в мире
+                lines.Add("Этого пока хватит. Остальное — там, в мире. Я буду рядом и заговорю, когда захочу.");
+                lines.Add("А теперь иди. Напиши «дальше» или нажми «далее ▸».");
                 StartCoroutine(Sequence(lines.ToArray()));
                 return;
             }
