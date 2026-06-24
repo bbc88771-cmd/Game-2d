@@ -399,6 +399,7 @@ namespace Sunset.UI
             _diffRow = AddRow(left.transform, 8, 52);
             AddSectionHeader(left.transform, "Моды", out var _);
             _modsList = AddColumn(left.transform, 8);
+            BuildAddModRow(left.transform);
 
             if (_lobby.mode == LobbyMode.Host)
             {
@@ -539,6 +540,42 @@ namespace Sunset.UI
                 _progN = n;
                 AddStepperBtn(prog.transform, "+", () => StepProgress(1));
             }
+        }
+
+        // ---------- добавление своего мода ----------
+
+        private void BuildAddModRow(Transform parent)
+        {
+            var row = NewUi("AddMod", parent);
+            row.AddComponent<LayoutElement>().preferredHeight = 48;
+
+            var inputBg = NewUi("InputBg", row.transform);
+            Anchored(inputBg, new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0.5f),
+                new Vector2(0, 0), new Vector2(-150, 0));
+            var irt = inputBg.GetComponent<RectTransform>();
+            irt.anchorMin = new Vector2(0, 0); irt.anchorMax = new Vector2(1, 1);
+            irt.offsetMin = new Vector2(0, 0); irt.offsetMax = new Vector2(-140, 0);
+            inputBg.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.06f);
+            var input = BuildChatInput(inputBg.transform, "Название своего мода…");
+            input.characterLimit = 40;
+
+            var add = NewUi("Add", row.transform);
+            Anchored(add, new Vector2(1, 0), new Vector2(1, 1), new Vector2(1, 0.5f),
+                new Vector2(0, 0), new Vector2(130, 0));
+            add.AddComponent<Image>().color = new Color(1f, 0.54f, 0.17f, 0.18f);
+            add.AddComponent<Button>().onClick.AddListener(() =>
+            {
+                string name = (input.text ?? "").Trim();
+                if (name.Length == 0) return;
+                _mods.Add(new ModDef(name, "Свой мод", true, friend: false, custom: true));
+                input.text = "";
+                RenderMods();
+            });
+            var al = NewUi("Lbl", add.transform);
+            Stretch(al, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var at = al.AddComponent<TextMeshProUGUI>();
+            at.text = "+ Добавить"; at.fontSize = 20; at.color = ColGold;
+            at.alignment = TextAlignmentOptions.Center; ApplyFont(at);
         }
 
         // ---------- чат UI ----------
