@@ -296,6 +296,9 @@ namespace Sunset.UI
             if (!gate.ok) { RenderLocation(); return; }
             var loc = GameLocations.All[_lobby.locIndex];
             Debug.Log($"[Sunset] Старт игры из лобби: «{loc.name}», сложность {GameDifficulties.NameOf(_settings.difficulty)}, игроков {_lobby.Count}.");
+            PlayerPrefs.SetInt("sunset_start_location", _lobby.locIndex);
+            PlayerPrefs.Save();
+            SceneFlow.Go(SceneFlow.Cutscene);
         }
 
         // ---------- чат ----------
@@ -416,7 +419,7 @@ namespace Sunset.UI
             Anchored(back, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
                 new Vector2(40, -100), new Vector2(200, 50));
             back.AddComponent<Image>().color = ColPanel;
-            back.AddComponent<Button>().onClick.AddListener(() => Debug.Log("[Sunset] Выход из лобби в меню (связка сцен — отдельная фаза)."));
+            back.AddComponent<Button>().onClick.AddListener(() => SceneFlow.Go(SceneFlow.MainMenu));
             var bl = NewUi("Lbl", back.transform);
             Stretch(bl, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var bt = bl.AddComponent<TextMeshProUGUI>();

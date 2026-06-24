@@ -112,32 +112,24 @@ namespace Sunset.UI
         private void OnNewGame()
         {
             _sessionLaunched = true;
-            // черновик сейва, чтобы заработала «Продолжить» (порт startWorldStub)
-            PlayerPrefs.SetString(SaveKey, "{\"difficulty\":\"" + _settings.difficulty + "\"}");
-            PlayerPrefs.Save();
-            RefreshContinue();
-            OpenModal("Новая игра",
-                "Здесь начинается путь в разорванном мире «Sunset of the World».\n\n" +
-                "Дальше — вступление («Некий») и катсцена: см. сцены\n" +
-                "Sunset → Build Cutscene Scene / Build Dialogue Scene.\n\n" +
-                $"Сложность: {GameDifficulties.NameOf(_settings.difficulty)}.");
+            RecordExit(); // запоминаем «played» до загрузки следующей сцены
+            // новая игра начинается со вступления «Некого» (диалог + красный код)
+            SceneFlow.Go(SceneFlow.Dialogue);
         }
 
         private void OnContinue()
         {
             if (!PlayerPrefs.HasKey(SaveKey)) return;
             _sessionLaunched = true;
-            OpenModal("Продолжить",
-                "Загрузка последнего сейва.\n\n" +
-                "Геймплейная сцена мира — следующий шаг разработки.");
+            RecordExit();
+            SceneFlow.Go(SceneFlow.HeroSelect);
         }
 
-        private void OnLobbyStub(string title)
+        private void OnLobby(string title)
         {
             _sessionLaunched = true;
-            OpenModal(title,
-                "Мультиплеер-лобби переносится отдельной фазой.\n" +
-                "Логика разблокировки локаций уже готова (LobbyGate).");
+            RecordExit();
+            SceneFlow.Go(SceneFlow.Lobby);
         }
 
         // ---------- настройки ----------
@@ -338,8 +330,8 @@ namespace Sunset.UI
 
             AddMenuButton(col.transform, "Новая игра", OnNewGame);
             _continueBtn = AddMenuButton(col.transform, "Продолжить", OnContinue);
-            AddMenuButton(col.transform, "Создать лобби", () => OnLobbyStub("Создать лобби"));
-            AddMenuButton(col.transform, "Ввести код", () => OnLobbyStub("Ввести код"));
+            AddMenuButton(col.transform, "Создать лобби", () => OnLobby("Создать лобби"));
+            AddMenuButton(col.transform, "Ввести код", () => OnLobby("Ввести код"));
             AddMenuButton(col.transform, "Настройки", OpenSettings);
             AddMenuButton(col.transform, "Дневник", OpenJournal);
             AddMenuButton(col.transform, "Выход", OpenExit);

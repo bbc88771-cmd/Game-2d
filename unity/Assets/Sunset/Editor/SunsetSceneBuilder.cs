@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using Sunset.UI;
 using UnityEditor;
@@ -20,6 +21,40 @@ namespace Sunset.EditorTools
         private const string LobbyPath = SceneDir + "/Lobby.unity";
         private const string HeroPath = SceneDir + "/HeroSelect.unity";
         private const string RedCodePath = SceneDir + "/RedCode.unity";
+
+        /// <summary>Собирает сцену с одним объектом-компонентом без диалога.</summary>
+        private static void BuildScene<T>(string objectName, string path) where T : Component
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+            new GameObject(objectName).AddComponent<T>();
+            if (!Directory.Exists(SceneDir)) Directory.CreateDirectory(SceneDir);
+            EditorSceneManager.SaveScene(scene, path);
+        }
+
+        [MenuItem("Sunset/Build All Scenes")]
+        public static void BuildAllScenes()
+        {
+            // порядок в Build Settings: первым — главное меню (точка входа)
+            BuildScene<SunsetMainMenu>("SunsetMainMenu", MenuPath);
+            BuildScene<SunsetDialogue>("SunsetDialogue", ScenePath);
+            BuildScene<SunsetCutscene>("SunsetCutscene", CutscenePath);
+            BuildScene<SunsetLobby>("SunsetLobby", LobbyPath);
+            BuildScene<SunsetHeroSelect>("SunsetHeroSelect", HeroPath);
+
+            var paths = new[] { MenuPath, ScenePath, CutscenePath, LobbyPath, HeroPath };
+            var list = new List<EditorBuildSettingsScene>();
+            foreach (var p in paths) list.Add(new EditorBuildSettingsScene(p, true));
+            EditorBuildSettings.scenes = list.ToArray();
+
+            AssetDatabase.Refresh();
+            Debug.Log("[Sunset] Собраны все сцены и прописаны в Build Settings (вход — MainMenu).");
+            EditorUtility.DisplayDialog("Sunset",
+                "Собран весь поток игры и прописан в Build Settings:\n\n" +
+                "MainMenu → (Новая игра) → Dialogue → (далее) → Cutscene → HeroSelect → меню\n" +
+                "MainMenu → (Лобби) → Lobby → (старт) → Cutscene → HeroSelect\n\n" +
+                "Открой сцену MainMenu и нажми Play.\n" +
+                "Если текст не виден — Window → TextMeshPro → Import TMP Essential Resources.", "Ок");
+        }
 
         [MenuItem("Sunset/Build Red Code Scene")]
         public static void BuildRedCodeScene()

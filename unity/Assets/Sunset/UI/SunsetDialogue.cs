@@ -25,6 +25,9 @@ namespace Sunset.UI
         [Tooltip("Полноэкранный «красный код» + случайные сканы игрока (как в вебе).")]
         public bool enableRedCode = true;
 
+        [Tooltip("Сцена по кнопке «далее ▸» (пусто — кнопку не показывать). По умолчанию — катсцена.")]
+        public string nextScene = SceneFlow.Cutscene;
+
         private NekoState _state;
         private NekoBrain _brain;
         private RedCodeBackground _code;
@@ -318,6 +321,23 @@ namespace Sunset.UI
             sendTmp.color = ColNeko;
             sendTmp.alignment = TextAlignmentOptions.Center;
             if (TMP_Settings.defaultFontAsset != null) sendTmp.font = TMP_Settings.defaultFontAsset;
+
+            // кнопка «далее ▸» — продолжить к катсцене (часть единого потока игры)
+            if (!string.IsNullOrEmpty(nextScene))
+            {
+                var nextGo = NewUi("Next", root);
+                Anchored(nextGo, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1),
+                    new Vector2(-40, -40), new Vector2(180, 64));
+                var nextImg = nextGo.AddComponent<Image>();
+                nextImg.color = new Color(1f, 0.42f, 0.42f, 0.16f);
+                nextGo.AddComponent<Button>().onClick.AddListener(() => SceneFlow.Go(nextScene));
+                var nextLbl = NewUi("Lbl", nextGo.transform);
+                Stretch(nextLbl, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                var nextTmp = nextLbl.AddComponent<TextMeshProUGUI>();
+                nextTmp.text = "далее ▸"; nextTmp.fontSize = 26; nextTmp.color = ColNeko;
+                nextTmp.alignment = TextAlignmentOptions.Center;
+                if (TMP_Settings.defaultFontAsset != null) nextTmp.font = TMP_Settings.defaultFontAsset;
+            }
         }
 
         private TMP_InputField BuildInput(Transform parent, string placeholder)

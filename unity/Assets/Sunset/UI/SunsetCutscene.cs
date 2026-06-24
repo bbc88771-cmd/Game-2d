@@ -26,6 +26,9 @@ namespace Sunset.UI
         [Tooltip("Длительность катсцены (сек), если озвучка не задаёт её сама.")]
         public float fallbackDurationSec = 0f; // 0 → взять сумму CutsceneData.FallbackDurationsMs
 
+        [Tooltip("Сцена после катсцены (пусто — остаться). По умолчанию — выбор героя.")]
+        public string nextScene = SceneFlow.HeroSelect;
+
         /// <summary>Вызывается, когда катсцена доиграла или была пропущена.</summary>
         public event Action Finished;
 
@@ -115,6 +118,7 @@ namespace Sunset.UI
             _done = true;
             Debug.Log("[Sunset] Катсцена завершена.");
             Finished?.Invoke();
+            if (!string.IsNullOrEmpty(nextScene)) SceneFlow.Go(nextScene);
         }
 
         public void Skip()

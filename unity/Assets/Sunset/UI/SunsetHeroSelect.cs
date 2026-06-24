@@ -144,7 +144,14 @@ namespace Sunset.UI
         private void OnPick(string id)
         {
             Debug.Log($"[Sunset] Выбран герой: {GameHeroes.ById(id).name} ({id}).");
+            // запоминаем героя и черновик сейва, копим прогресс сложностей (порт startWorldStub)
+            PlayerPrefs.SetString("sunset_hero", id);
+            PlayerPrefs.SetString("sunset_save", "{\"hero\":\"" + id + "\"}");
+            PlayerPrefs.Save();
+            var settings = SettingsSave.Load();
+            ProgressSave.MarkCleared(settings.difficulty);
             HeroPicked?.Invoke(id);
+            SceneFlow.Go(SceneFlow.MainMenu);
         }
 
         // ---------- оболочка экрана ----------
@@ -184,7 +191,7 @@ namespace Sunset.UI
             Anchored(back, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
                 new Vector2(40, -20), new Vector2(180, 50));
             back.AddComponent<Image>().color = ColPanel;
-            back.AddComponent<Button>().onClick.AddListener(() => Debug.Log("[Sunset] Назад из выбора героя (связка сцен — отдельная фаза)."));
+            back.AddComponent<Button>().onClick.AddListener(() => SceneFlow.Go(SceneFlow.MainMenu));
             var bl = NewUi("Lbl", back.transform);
             Stretch(bl, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var bt = bl.AddComponent<TextMeshProUGUI>();
