@@ -151,7 +151,7 @@ namespace Sunset.UI
             var settings = SettingsSave.Load();
             ProgressSave.MarkCleared(settings.difficulty);
             HeroPicked?.Invoke(id);
-            SceneFlow.Go(SceneFlow.MainMenu);
+            SceneFlow.Go(SceneFlow.World);
         }
 
         // ---------- оболочка экрана ----------

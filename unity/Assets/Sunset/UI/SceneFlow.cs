@@ -20,6 +20,7 @@ namespace Sunset.UI
         public const string Cutscene = "Cutscene";
         public const string Lobby = "Lobby";
         public const string HeroSelect = "HeroSelect";
+        public const string World = "World";
 
         public static void Go(string scene)
         {
