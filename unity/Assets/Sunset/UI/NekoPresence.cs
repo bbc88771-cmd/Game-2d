@@ -62,6 +62,26 @@ namespace Sunset.UI
             if (!string.IsNullOrEmpty(line)) Show(line);
         }
 
+        /// <summary>Реплика поддержки после ошибки/смерти/тяжёлого выбора.</summary>
+        public void Support()
+        {
+            string line = NekoVoice.Support(_state, _recent, _rng);
+            if (!string.IsNullOrEmpty(line)) Show(line);
+        }
+
+        /// <summary>
+        /// Записать поступок игрока (добрый/злой) — смещает путь к концовке и тон
+        /// «Некого» (темнее/мягче). Зовётся из геймплейных выборов.
+        /// </summary>
+        public void NoteDeed(bool good)
+        {
+            NekoPath.RecordChoice(_state, good);
+            SunsetSave.Save(_state);
+        }
+
+        /// <summary>Текущий путь к концовке ("good"/"middle"/"bad"/"drift").</summary>
+        public string CurrentPath => NekoPath.Estimate(_state);
+
         // ---------- внутреннее ----------
 
         private IEnumerator SpontaneousLoop()
@@ -72,8 +92,14 @@ namespace Sunset.UI
                 // не перебиваем недавнюю реплику и не частим
                 if (Time.time - _lastShownTime >= NekoAmbient.TriggerMinGap)
                 {
-                    string line = NekoAmbient.Spontaneous(_state, _recent, _rng);
-                    if (!string.IsNullOrEmpty(line)) Show(line);
+                    // иногда — «двойная реплика»: тёплое → тревожный хвост
+                    if (NekoVoice.TryDouble(_state, _rng, out string warm, out string tail))
+                        SayPair(warm, tail);
+                    else
+                    {
+                        string line = NekoVoice.Spontaneous(_state, _recent, _rng);
+                        if (!string.IsNullOrEmpty(line)) Show(line);
+                    }
                 }
                 yield return new WaitForSeconds(NekoAmbient.NextSpontaneousDelay(_rng));
             }
@@ -83,9 +109,37 @@ namespace Sunset.UI
         {
             _lastShownTime = Time.time;
             Remember(line);
+            ApplyTint();
             _label.text = line;
             if (_fade != null) StopCoroutine(_fade);
             _fade = StartCoroutine(FadeCycle());
+        }
+
+        // тёплое, затем через миг — приглушённый тревожный хвост (одной мыслью)
+        private void SayPair(string warm, string tail)
+        {
+            _lastShownTime = Time.time;
+            Remember(warm);
+            ApplyTint();
+            if (_fade != null) StopCoroutine(_fade);
+            _fade = StartCoroutine(PairCycle(warm, tail));
+        }
+
+        private IEnumerator PairCycle(string warm, string tail)
+        {
+            _label.text = warm;
+            yield return Fade(_group, 1f, 0.6f);
+            yield return new WaitForSeconds(1.4f);
+            _label.text = warm + "   <alpha=#88>" + tail;
+            yield return new WaitForSeconds(holdSeconds);
+            yield return Fade(_group, 0f, 1.2f);
+        }
+
+        // цвет реплики по «темноте» пути: светлее на добром пути, краснее на тёмном
+        private void ApplyTint()
+        {
+            float d = NekoPath.DarknessLevel(_state);
+            _label.color = Color.Lerp(new Color(1f, 0.62f, 0.56f), new Color(0.92f, 0.22f, 0.22f), d);
         }
 
         private void Remember(string line)

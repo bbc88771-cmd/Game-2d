@@ -59,6 +59,11 @@ namespace Sunset.Game
         {
             if (Input.GetKeyDown(KeyCode.Escape)) SceneFlow.Go(SceneFlow.MainMenu);
 
+            // демо «Некого»: H — поддержка; G — добрый поступок, B — злой (смещают путь/тон)
+            if (Input.GetKeyDown(KeyCode.H)) _neko.Support();
+            if (Input.GetKeyDown(KeyCode.G)) _neko.NoteDeed(true);
+            if (Input.GetKeyDown(KeyCode.B)) _neko.NoteDeed(false);
+
             if (_player != null && _enemy != null)
             {
                 float d = Vector2.Distance(_player.position, _enemy.position);
@@ -262,7 +267,7 @@ namespace Sunset.Game
             hrt.pivot = new Vector2(0.5f, 0); hrt.anchoredPosition = new Vector2(0, 24);
             hrt.sizeDelta = new Vector2(1200, 30);
             var hint = hintGo.AddComponent<TextMeshProUGUI>();
-            hint.text = "WASD / стрелки — движение · собирай золотое · красный преследует · Esc — в меню";
+            hint.text = "WASD — движение · собирай золотое · 1–6 события · H поддержка · G добро / B зло (тон «Некого») · Esc — меню";
             hint.fontSize = 18; hint.color = new Color(0.95f, 0.91f, 0.81f, 0.45f);
             hint.alignment = TextAlignmentOptions.Center;
             if (TMP_Settings.defaultFontAsset != null) hint.font = TMP_Settings.defaultFontAsset;
