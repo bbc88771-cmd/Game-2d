@@ -19,6 +19,29 @@ namespace Sunset.EditorTools
         private const string MenuPath = SceneDir + "/MainMenu.unity";
         private const string LobbyPath = SceneDir + "/Lobby.unity";
         private const string HeroPath = SceneDir + "/HeroSelect.unity";
+        private const string RedCodePath = SceneDir + "/RedCode.unity";
+
+        [MenuItem("Sunset/Build Red Code Scene")]
+        public static void BuildRedCodeScene()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+
+            var go = new GameObject("RedCode");
+            var rc = go.AddComponent<Sunset.UI.RedCodeBackground>();
+            rc.baseOpacity = 0.45f;
+            rc.autoScan = true;
+
+            if (!Directory.Exists(SceneDir)) Directory.CreateDirectory(SceneDir);
+            EditorSceneManager.SaveScene(scene, RedCodePath);
+            AssetDatabase.Refresh();
+
+            Debug.Log("[Sunset] Демо-сцена красного кода собрана: " + RedCodePath + ". Нажми Play.");
+            EditorUtility.DisplayDialog("Sunset",
+                "Демо красного кода собрано:\n" + RedCodePath +
+                "\n\nПоток кода + случайные сканы (autoScan). В реальном интро код подключается\n" +
+                "автоматически на экране диалога (SunsetDialogue.enableRedCode).\n\n" +
+                "Если текст не виден — импортируй TMP Essentials:\nWindow → TextMeshPro → Import TMP Essential Resources.\nЗатем нажми Play.", "Ок");
+        }
 
         [MenuItem("Sunset/Build Hero Select Scene")]
         public static void BuildHeroSelectScene()

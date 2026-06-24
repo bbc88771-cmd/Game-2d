@@ -22,8 +22,13 @@ namespace Sunset.UI
         [Tooltip("16 — мягкий тон, 18 — жёсткий.")]
         public string rating = "16";
 
+        [Tooltip("Полноэкранный «красный код» + случайные сканы игрока (как в вебе).")]
+        public bool enableRedCode = true;
+
         private NekoState _state;
         private NekoBrain _brain;
+        private RedCodeBackground _code;
+        private Image _bgImg;
 
         private TextMeshProUGUI _chat;
         private ScrollRect _scroll;
@@ -42,9 +47,23 @@ namespace Sunset.UI
             _state.visits += 1;
             _brain = new NekoBrain(_state) { Rating = rating, Probe = BuildProbe() };
             BuildUi();
+
+            if (enableRedCode)
+            {
+                var codeGo = new GameObject("RedCode");
+                codeGo.transform.SetParent(transform, false);
+                _code = codeGo.AddComponent<RedCodeBackground>();
+                _code.SetProbe(BuildScanInput);
+                // приоткрываем фон диалога, чтобы код был виден позади чата
+                if (_bgImg != null) { var c = _bgImg.color; c.a = 0.5f; _bgImg.color = c; }
+            }
         }
 
-        private void Start() => StartCoroutine(Intro());
+        private void Start()
+        {
+            if (_code != null) _code.StartScheduler();
+            StartCoroutine(Intro());
+        }
 
         private void OnApplicationQuit() => SunsetSave.Save(_state);
         private void OnApplicationPause(bool paused) { if (paused) SunsetSave.Save(_state); }
@@ -80,6 +99,9 @@ namespace Sunset.UI
             if (text.Length == 0) { Focus(); return; }
 
             AddPlayer(text);
+
+            // «момент»: игрок спросил, видит ли его «Некий» / кто он → скан
+            if (_code != null && PlayerScan.WantsScan(text)) _code.ScanBurst();
 
             if (_awaitingName)
             {
@@ -189,6 +211,26 @@ namespace Sunset.UI
             return p;
         }
 
+        // Расширенный «слепок» для скан-досье (имя/экран/язык/ядра + то же, что в Probe).
+        private ScanInput BuildScanInput()
+        {
+            var p = BuildProbe();
+            return new ScanInput
+            {
+                name = _state != null ? _state.knownName : null,
+                now = p.now,
+                city = p.city,
+                region = p.region,
+                os = p.os,
+                device = Application.platform == RuntimePlatform.WebGLPlayer ? "браузер" : SystemInfo.deviceType.ToString(),
+                entry = "напрямую",
+                screenW = Screen.width,
+                screenH = Screen.height,
+                lang = Application.systemLanguage.ToString(),
+                cpuThreads = SystemInfo.processorCount,
+            };
+        }
+
         // ---------- построение UI ----------
 
         private void BuildUi()
@@ -213,8 +255,8 @@ namespace Sunset.UI
             // фон
             var bg = NewUi("Background", root);
             Stretch(bg, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            var bgImg = bg.AddComponent<Image>();
-            bgImg.color = ColBg;
+            _bgImg = bg.AddComponent<Image>();
+            _bgImg.color = ColBg;
 
             // чат (ScrollRect)
             var scrollGo = NewUi("Chat", root);
