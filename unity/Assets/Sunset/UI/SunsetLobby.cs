@@ -63,6 +63,13 @@ namespace Sunset.UI
         private RectTransform _dotsRow;
         private Button _prevBtn, _nextBtn, _startBtn;
 
+        // чат
+        private TextMeshProUGUI _chatLog;
+        private ScrollRect _chatScroll;
+        private TMP_InputField _chatInput;
+        private string _chatText = "";
+        private string Me => string.IsNullOrEmpty(_neko.knownName) ? "Вы" : _neko.knownName;
+
         private void Awake()
         {
             _settings = SettingsSave.Load();
@@ -97,8 +104,31 @@ namespace Sunset.UI
                 _lobby.AddGuest(new LobbyPlayer(name, false, unlocked));
                 RenderPlayers();
                 RenderLocation(); // новый игрок мог заблокировать выбранную локацию
+
+                // приветствие нового игрока в чат
+                ChatAdd(name, LobbyChat.PlayerGreets[idx % LobbyChat.PlayerGreets.Length], ChatKind.Other);
+
+                // «Некий» реагирует: общая реплика на первого друга, дальше — личные шёпоты
+                if (_lobby.Count == 2)
+                    ChatAdd("Некий", LobbyChat.NekoLobby[_rng.Next(LobbyChat.NekoLobby.Length)], ChatKind.Neko);
+                else
+                    ChatAdd("Некий", LobbyChat.Whisper(
+                        LobbyChat.NekoWhispers[_rng.Next(LobbyChat.NekoWhispers.Length)], Me, name), ChatKind.Neko);
+
+                // отложенная болтовня вошедшего
+                var idles = LobbyChat.PlayerIdles[idx % LobbyChat.PlayerIdles.Length];
+                string idle = idles[_rng.Next(idles.Length)];
+                string joinedName = name;
+                StartCoroutine(DelayedChat(joinedName, idle, 2.5f + (float)_rng.NextDouble() * 2f));
+
                 yield return new WaitForSeconds(1.8f + (float)_rng.NextDouble() * 2.4f);
             }
+        }
+
+        private IEnumerator DelayedChat(string name, string text, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (this != null && _lobby != null) ChatAdd(name, text, ChatKind.Other);
         }
 
         // ---------- перерисовка ----------
@@ -268,6 +298,45 @@ namespace Sunset.UI
             Debug.Log($"[Sunset] Старт игры из лобби: «{loc.name}», сложность {GameDifficulties.NameOf(_settings.difficulty)}, игроков {_lobby.Count}.");
         }
 
+        // ---------- чат ----------
+
+        private enum ChatKind { Self, Other, Neko }
+
+        private void OnChatSubmit(string raw)
+        {
+            string text = (raw ?? "").Trim();
+            if (_chatInput != null) _chatInput.text = "";
+            if (text.Length == 0) { FocusChat(); return; }
+            ChatAdd(Me, text, ChatKind.Self);
+            FocusChat();
+        }
+
+        private void ChatAdd(string name, string text, ChatKind kind)
+        {
+            if (_chatLog == null) return;
+            string color = kind == ChatKind.Neko ? "ff5a5a" : kind == ChatKind.Self ? "8fe09a" : "cdbfa6";
+            string who = kind == ChatKind.Neko ? "Некий" : name;
+            string body = text.Replace("<", "‹").Replace(">", "›");
+            _chatText += (_chatText.Length > 0 ? "\n" : "") +
+                $"<b><color=#{color}>{who}:</color></b> {body}";
+            _chatLog.text = _chatText;
+            ScrollChatBottom();
+        }
+
+        private void ScrollChatBottom()
+        {
+            if (_chatScroll == null) return;
+            Canvas.ForceUpdateCanvases();
+            _chatScroll.verticalNormalizedPosition = 0f;
+        }
+
+        private void FocusChat()
+        {
+            if (_chatInput == null) return;
+            _chatInput.ActivateInputField();
+            _chatInput.Select();
+        }
+
         // ---------- построение UI ----------
 
         private void BuildUi()
@@ -314,6 +383,8 @@ namespace Sunset.UI
 
             _pcount = AddSectionHeader(left.transform, "Игроки", out var _);
             _playersGrid = AddColumn(left.transform, 12);
+            AddSectionHeader(left.transform, "Чат", out var _);
+            BuildChat(left.transform);
             AddSectionHeader(left.transform, "Сложность", out var _);
             _diffRow = AddRow(left.transform, 8, 52);
             AddSectionHeader(left.transform, "Моды", out var _);
@@ -458,6 +529,98 @@ namespace Sunset.UI
                 _progN = n;
                 AddStepperBtn(prog.transform, "+", () => StepProgress(1));
             }
+        }
+
+        // ---------- чат UI ----------
+
+        private void BuildChat(Transform parent)
+        {
+            var wrap = NewUi("Chat", parent);
+            wrap.AddComponent<LayoutElement>().preferredHeight = 240;
+
+            // лог (прокрутка)
+            var scrollGo = NewUi("Log", wrap.transform);
+            Anchored(scrollGo, new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 0.5f),
+                new Vector2(0, 26), new Vector2(0, -52));
+            var srt = scrollGo.GetComponent<RectTransform>();
+            srt.anchorMin = new Vector2(0, 0); srt.anchorMax = new Vector2(1, 1);
+            srt.offsetMin = new Vector2(0, 56); srt.offsetMax = new Vector2(0, 0);
+            _chatScroll = scrollGo.AddComponent<ScrollRect>();
+            _chatScroll.horizontal = false; _chatScroll.vertical = true; _chatScroll.scrollSensitivity = 26f;
+            scrollGo.AddComponent<Image>().color = ColPanel;
+
+            var viewport = NewUi("Viewport", scrollGo.transform);
+            Stretch(viewport, Vector2.zero, Vector2.one, new Vector2(10, 8), new Vector2(-10, -8));
+            viewport.AddComponent<Image>().color = new Color(0, 0, 0, 0.001f);
+            viewport.AddComponent<RectMask2D>();
+
+            var content = NewUi("Content", viewport.transform);
+            var crt = content.GetComponent<RectTransform>();
+            crt.anchorMin = new Vector2(0, 1); crt.anchorMax = new Vector2(1, 1);
+            crt.pivot = new Vector2(0.5f, 1); crt.anchoredPosition = Vector2.zero;
+            content.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _chatLog = content.AddComponent<TextMeshProUGUI>();
+            _chatLog.fontSize = 18; _chatLog.color = ColGold; _chatLog.richText = true;
+            _chatLog.enableWordWrapping = true; _chatLog.alignment = TextAlignmentOptions.TopLeft;
+            ApplyFont(_chatLog);
+
+            _chatScroll.viewport = viewport.GetComponent<RectTransform>();
+            _chatScroll.content = crt;
+
+            // строка ввода
+            var inputBg = NewUi("InputBg", wrap.transform);
+            Anchored(inputBg, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
+                new Vector2(-60, 22), new Vector2(-60, 44));
+            var irt = inputBg.GetComponent<RectTransform>();
+            irt.anchorMin = new Vector2(0, 0); irt.anchorMax = new Vector2(1, 0);
+            irt.offsetMin = new Vector2(0, 0); irt.offsetMax = new Vector2(-56, 44);
+            inputBg.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.06f);
+            _chatInput = BuildChatInput(inputBg.transform, "Написать в чат…");
+            _chatInput.onSubmit.AddListener(OnChatSubmit);
+
+            var send = NewUi("Send", wrap.transform);
+            Anchored(send, new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
+                new Vector2(0, 0), new Vector2(48, 44));
+            send.AddComponent<Image>().color = new Color(1f, 0.54f, 0.17f, 0.18f);
+            send.AddComponent<Button>().onClick.AddListener(() => OnChatSubmit(_chatInput.text));
+            var sl = NewUi("Lbl", send.transform);
+            Stretch(sl, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var st = sl.AddComponent<TextMeshProUGUI>();
+            st.text = "▸"; st.fontSize = 26; st.color = ColEmber;
+            st.alignment = TextAlignmentOptions.Center; ApplyFont(st);
+        }
+
+        private TMP_InputField BuildChatInput(Transform parent, string placeholder)
+        {
+            var go = NewUi("Input", parent);
+            Stretch(go, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var input = go.AddComponent<TMP_InputField>();
+            input.lineType = TMP_InputField.LineType.SingleLine;
+
+            var area = NewUi("Text Area", go.transform);
+            Stretch(area, Vector2.zero, Vector2.one, new Vector2(12, 4), new Vector2(-12, -4));
+            area.AddComponent<RectMask2D>();
+
+            var ph = NewUi("Placeholder", area.transform);
+            Stretch(ph, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var phT = ph.AddComponent<TextMeshProUGUI>();
+            phT.text = placeholder; phT.fontSize = 18; phT.fontStyle = FontStyles.Italic;
+            phT.color = new Color(1f, 1f, 1f, 0.35f); phT.alignment = TextAlignmentOptions.MidlineLeft;
+            ApplyFont(phT);
+
+            var txt = NewUi("Text", area.transform);
+            Stretch(txt, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var txtT = txt.AddComponent<TextMeshProUGUI>();
+            txtT.fontSize = 18; txtT.color = ColGold; txtT.alignment = TextAlignmentOptions.MidlineLeft;
+            ApplyFont(txtT);
+
+            input.textViewport = area.GetComponent<RectTransform>();
+            input.textComponent = txtT;
+            input.placeholder = phT;
+            input.pointSize = 18;
+            input.characterLimit = 120;
+            if (TMP_Settings.defaultFontAsset != null) input.fontAsset = TMP_Settings.defaultFontAsset;
+            return input;
         }
 
         // ---------- секции/виджеты ----------
