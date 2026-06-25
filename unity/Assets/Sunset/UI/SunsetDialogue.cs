@@ -424,17 +424,21 @@ namespace Sunset.UI
             txtTmp.overflowMode = TextOverflowModes.Ellipsis;
             txtTmp.alignment = TextAlignmentOptions.MidlineLeft;
 
+            // ВАЖНО: textComponent/placeholder — до fontAsset. В Unity 6 сеттер
+            // fontAsset зовёт SetGlobalFontAsset, который обращается к textComponent;
+            // если он ещё не назначен — NullReferenceException (TMP_InputField.cs).
+            input.textViewport = taRt;
+            input.textComponent = txtTmp;
+            input.placeholder = phTmp;
+            input.pointSize = 28;
+            input.characterLimit = 200;
+
             if (TMP_Settings.defaultFontAsset != null)
             {
                 phTmp.font = TMP_Settings.defaultFontAsset;
                 txtTmp.font = TMP_Settings.defaultFontAsset;
                 input.fontAsset = TMP_Settings.defaultFontAsset;
             }
-            input.textViewport = taRt;
-            input.textComponent = txtTmp;
-            input.placeholder = phTmp;
-            input.pointSize = 28;
-            input.characterLimit = 200;
             return input;
         }
 
