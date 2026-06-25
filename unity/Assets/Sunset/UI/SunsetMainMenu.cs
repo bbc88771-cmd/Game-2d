@@ -365,12 +365,14 @@ namespace Sunset.UI
             else bgImg.color = ColBg;
             bgImg.raycastTarget = false;
 
-            // затемнение слева — для читаемости логотипа и кнопок
+            // затемнение слева — плавный градиент (а не жёсткая панель), чтобы
+            // текст читался, но переход в арт был мягким, как в веб-версии
             var shade = NewUi("LeftShade", _root);
             Anchored(shade, new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
-                new Vector2(0, 0), new Vector2(820, 0));
+                new Vector2(0, 0), new Vector2(1000, 0));
             var shadeImg = shade.AddComponent<Image>();
-            shadeImg.color = new Color(0f, 0f, 0f, 0.55f);
+            shadeImg.sprite = MakeHorizontalFade(new Color(0f, 0f, 0f, 0.8f));
+            shadeImg.color = Color.white;
             shadeImg.raycastTarget = false;
 
             // логотип
@@ -425,17 +427,17 @@ namespace Sunset.UI
             var modsLbl = NewUi("Lbl", mods.transform);
             Stretch(modsLbl, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var modsT = modsLbl.AddComponent<TextMeshProUGUI>();
-            modsT.text = "⚙ Моды"; modsT.fontSize = 26; modsT.color = ColEmber;
+            modsT.text = "Моды"; modsT.fontSize = 26; modsT.color = ColEmber;
             modsT.alignment = TextAlignmentOptions.Center; ApplyFont(modsT);
 
             // build-tag
             var tag = NewUi("BuildTag", _root);
-            Anchored(tag, new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
-                new Vector2(70, 30), new Vector2(400, 30));
+            Anchored(tag, new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
+                new Vector2(-40, 28), new Vector2(460, 30));
             var tagT = tag.AddComponent<TextMeshProUGUI>();
-            tagT.text = "prototype build · unity"; tagT.fontSize = 18;
+            tagT.text = "PROTOTYPE BUILD · UNITY"; tagT.fontSize = 18; tagT.characterSpacing = 6f;
             tagT.color = new Color(0.95f, 0.91f, 0.81f, 0.4f);
-            tagT.alignment = TextAlignmentOptions.Left; ApplyFont(tagT);
+            tagT.alignment = TextAlignmentOptions.Right; ApplyFont(tagT);
 
             // реплика «Некого» (присутствие)
             var neko = NewUi("MenuNeko", _root);
@@ -501,20 +503,27 @@ namespace Sunset.UI
         {
             var go = NewUi("Btn_" + label, parent);
             var le = go.AddComponent<LayoutElement>();
-            le.preferredHeight = 62;
+            le.preferredHeight = 58;
+            // подложка прозрачна по умолчанию, подсвечивается лишь при наведении —
+            // как в веб-версии (просто жирный текст на фоне арта)
             var img = go.AddComponent<Image>();
-            img.color = ColBtnBg;
+            img.color = Color.white;
             var btn = go.AddComponent<Button>();
+            btn.targetGraphic = img;
             btn.onClick.AddListener(onClick);
             var colors = btn.colors;
-            colors.highlightedColor = new Color(1f, 0.54f, 0.17f, 0.18f);
-            colors.disabledColor = new Color(0.1f, 0.08f, 0.07f, 0.4f);
+            colors.normalColor = new Color(1f, 1f, 1f, 0f);
+            colors.highlightedColor = new Color(1f, 0.54f, 0.17f, 0.16f);
+            colors.pressedColor = new Color(1f, 0.54f, 0.17f, 0.26f);
+            colors.selectedColor = new Color(1f, 1f, 1f, 0f);
+            colors.disabledColor = new Color(1f, 1f, 1f, 0f);
+            colors.fadeDuration = 0.1f;
             btn.colors = colors;
 
             var lblGo = NewUi("Lbl", go.transform);
-            Stretch(lblGo, Vector2.zero, Vector2.one, new Vector2(24, 0), Vector2.zero);
+            Stretch(lblGo, Vector2.zero, Vector2.one, new Vector2(8, 0), Vector2.zero);
             var t = lblGo.AddComponent<TextMeshProUGUI>();
-            t.text = label; t.fontSize = 30; t.color = ColGold;
+            t.text = label; t.fontSize = 36; t.color = ColGold; t.fontStyle = FontStyles.Bold;
             t.alignment = TextAlignmentOptions.Left; ApplyFont(t);
             return btn;
         }
@@ -749,6 +758,21 @@ namespace Sunset.UI
         private static void ApplyFont(TMP_Text t)
         {
             if (TMP_Settings.defaultFontAsset != null) t.font = TMP_Settings.defaultFontAsset;
+        }
+
+        // Горизонтальный градиент: насыщенный слева → прозрачный справа. Нужен для
+        // мягкого затемнения под текстом меню (без жёсткой панели).
+        private static Sprite MakeHorizontalFade(Color left, int w = 256)
+        {
+            var tex = new Texture2D(w, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int x = 0; x < w; x++)
+            {
+                float a = 1f - x / (float)(w - 1); // 1 слева → 0 справа
+                a *= a;                            // мягче спад
+                tex.SetPixel(x, 0, new Color(left.r, left.g, left.b, left.a * a));
+            }
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, w, 1), new Vector2(0.5f, 0.5f), 100f);
         }
 
         private static GameObject NewUi(string name, Transform parent)
