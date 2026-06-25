@@ -125,43 +125,6 @@ namespace Sunset.Tests
             Assert.IsTrue(GameDifficulties.IsValid("nightmare"));
             Assert.IsFalse(GameDifficulties.IsValid("nope"));
         }
-
-        // ---------- дневник ----------
-
-        [Test]
-        public void Journal_Pristine_WhenFreshAndCalm()
-        {
-            var s = new NekoState { visits = 1, dark = 0 };
-            var e = MenuJournal.Build(s, 0);
-            Assert.AreEqual(3, e.Length);
-            // нет правок «Некого» на первой записи
-            StringAssert.DoesNotContain("Некий был там", e[0].text);
-            Assert.IsNull(e[0].note);
-        }
-
-        [Test]
-        public void Journal_Edited_OnReturnOrDark()
-        {
-            var s = new NekoState { visits = 2, dark = 0 };
-            var e = MenuJournal.Build(s, 0);
-            StringAssert.Contains("Некий был там", e[0].text);
-            Assert.IsNotNull(e[0].note);
-        }
-
-        [Test]
-        public void Journal_FearLine_FlipsWithDark()
-        {
-            Assert.AreEqual("Мне страшно. Но я продолжу.", MenuJournal.Build(new NekoState { dark = 0 }, 0)[1].text);
-            Assert.AreEqual("Мне страшно. Это правильно.", MenuJournal.Build(new NekoState { dark = 8 }, 0)[1].text);
-        }
-
-        [Test]
-        public void Journal_AnnotationIsDeterministicBySeed()
-        {
-            var a = MenuJournal.Build(new NekoState(), 2)[1].note;
-            var b = MenuJournal.Build(new NekoState(), 2)[1].note;
-            Assert.AreEqual(a, b);
-            Assert.AreEqual(MenuJournal.Annotations[2], a);
-        }
+        // дневник вынесен в Diary — см. DiaryTests.
     }
 }

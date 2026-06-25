@@ -13,7 +13,7 @@ namespace Sunset.UI
     /// Главное меню (фаза 4 порта). Строит весь UI из кода (фон + логотип, колонка
     /// кнопок слева, «Некий» в меню, модальные окна настроек/дневника/модов/выхода).
     /// Логика — в Core (<see cref="GameSettings"/>, <see cref="MenuPresence"/>,
-    /// <see cref="MenuJournal"/>, <see cref="GameDifficulties"/>).
+    /// <see cref="Diary"/>, <see cref="GameDifficulties"/>).
     ///
     /// Кнопки «Новая игра», «Создать лобби», «Ввести код» пока показывают заглушку-
     /// модалку (как в веб-прототипе) — соответствующие сцены подключаются отдельно.
@@ -207,17 +207,64 @@ namespace Sunset.UI
         private void OpenJournal()
         {
             var body = NewVerticalGroup();
-            AddHint(body.transform, MenuJournal.Intro);
+            AddHint(body.transform, Diary.Intro);
 
-            var entries = MenuJournal.Build(_neko, UnityEngine.Random.Range(0, 9999));
+            string heroId = PlayerPrefs.GetString("sunset_hero", "");
+            string path = NekoPath.Estimate(_neko);
+            Color baseCol = JournalColor(path);
+
+            var entries = Diary.Build(_neko, heroId, UnityEngine.Random.Range(0, 999999));
             foreach (var e in entries)
             {
-                AddParagraph(body.transform, "«" + e.text + "»", ColGold);
-                if (!string.IsNullOrEmpty(e.note))
-                    AddParagraph(body.transform, e.note, ColEmber, italic: true);
+                string draw = DrawingNote(e.drawing, e.drawingAltered);
+                string tail = draw != null ? $"   <size=15><i><color=#9a8d7c>(рисунок: {draw})</color></i></size>" : "";
+                switch (e.kind)
+                {
+                    case DiaryKind.Neko: // запись рукой «Некого»
+                        AddParagraph(body.transform, "✎ " + e.text, new Color(1f, 0.38f, 0.36f), italic: true);
+                        break;
+                    case DiaryKind.Creepy: // странная, чужая запись
+                        AddParagraph(body.transform, e.text, new Color(0.86f, 0.24f, 0.24f), italic: true);
+                        break;
+                    case DiaryKind.Edited: // переписано задним числом
+                        AddParagraph(body.transform,
+                            "«" + e.text + "»   <size=15><color=#a06b6b>(изменено)</color></size>" + tail, baseCol);
+                        if (!string.IsNullOrEmpty(e.note))
+                            AddParagraph(body.transform, "— " + e.note + " — Н.", ColEmber, italic: true);
+                        break;
+                    default:
+                        AddParagraph(body.transform, "«" + e.text + "»" + tail, baseCol);
+                        break;
+                }
             }
             AddPrimaryButton(body.transform, "Закрыть", CloseModal);
             OpenModal("Дневник", body);
+        }
+
+        // цвет записей по пути: теплее на добром, холоднее/серее на тёмном
+        private static Color JournalColor(string path)
+        {
+            switch (path)
+            {
+                case NekoPath.Good: return new Color(0.98f, 0.92f, 0.78f);
+                case NekoPath.Bad: return new Color(0.74f, 0.76f, 0.80f);
+                case NekoPath.Middle: return new Color(0.90f, 0.88f, 0.82f);
+                default: return ColGold;
+            }
+        }
+
+        // текстовое описание рисунка (без emoji — TMP-шрифт без эмодзи)
+        private static string DrawingNote(string drawing, bool altered)
+        {
+            switch (drawing)
+            {
+                case "pebble": return altered ? "камушек, но с трещиной" : "камушек с улыбкой";
+                case "tree": return "человечек под деревом";
+                case "heart": return altered ? "сердечко с трещиной" : "маленькое сердечко";
+                case "food": return "кусок еды с ножками";
+                case "cup": return "кружка с волнами";
+                default: return null;
+            }
         }
 
         // ---------- моды ----------
