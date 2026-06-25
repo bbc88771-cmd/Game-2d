@@ -13,6 +13,10 @@ namespace Sunset.Game
         /// <summary>Вызывается, когда игрок подобрал предмет.</summary>
         public Action<Pickup> Collected;
 
+        /// <summary>Какой ресурс и сколько даёт (для строительства).</summary>
+        public string resource;
+        public int amount;
+
         private bool _taken;
 
         private void OnTriggerEnter2D(Collider2D other)

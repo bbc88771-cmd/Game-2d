@@ -27,16 +27,16 @@ namespace Sunset.Game
         private NekoPresence _neko;
         private Transform _player;
         private Transform _enemy;
-        private int _collected;
-        private int _total;
-        private TextMeshProUGUI _hud;
         private Vector2 _boundsMin, _boundsMax;
         private float _spriteW, _spriteH;   // размер острова в мире при масштабе 1
         private readonly System.Random _rng = new System.Random();
         private bool _wounded;
+        private Inventory _inv;
+        private BuildController _build;
 
         private void Awake()
         {
+            _inv = new Inventory();
             BuildCamera(out Camera cam);
             BuildGround();
             BuildBoundary();
@@ -46,6 +46,10 @@ namespace Sunset.Game
             _enemy = BuildEnemy(_player);
             _neko = gameObject.AddComponent<NekoPresence>();
             BuildHud();
+
+            // строительство: меню крафтов, призрак-установка, табличка, анимация
+            _build = gameObject.AddComponent<BuildController>();
+            _build.Init(cam, _inv, IsOnLand, _player);
 
             // камера следует за игроком в рамках острова
             var follow = cam.gameObject.AddComponent<CameraFollow2D>();
@@ -57,12 +61,23 @@ namespace Sunset.Game
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.Escape)) SceneFlow.Go(SceneFlow.MainMenu);
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (_build != null && _build.IsPlacing) _build.CancelPlacement();
+                else SceneFlow.Go(SceneFlow.MainMenu);
+            }
 
             // демо «Некого»: H — поддержка; G — добрый поступок, B — злой (смещают путь/тон)
             if (Input.GetKeyDown(KeyCode.H)) _neko.Support();
             if (Input.GetKeyDown(KeyCode.G)) _neko.NoteDeed(true);
             if (Input.GetKeyDown(KeyCode.B)) _neko.NoteDeed(false);
+
+            // демо строительства: R — выдать ресурсы (чтобы быстро достроить)
+            if (Input.GetKeyDown(KeyCode.R))
+            {
+                _inv.Add(ResourceId.Wood, 200); _inv.Add(ResourceId.Stone, 150);
+                _inv.Add(ResourceId.Branch, 120); _inv.Add(ResourceId.Clay, 80);
+            }
 
             if (_player != null && _enemy != null)
             {
@@ -195,20 +210,29 @@ namespace Sunset.Game
             return go.transform;
         }
 
+        // тип ресурса ноды + сколько даёт за сбор
+        private static readonly (string res, int amount)[] ResourceNodes =
+        {
+            (ResourceId.Wood, 60), (ResourceId.Stone, 40),
+            (ResourceId.Branch, 50), (ResourceId.Clay, 30),
+        };
+
         private void BuildPickups()
         {
-            _total = Mathf.Max(0, pickupCount);
-            for (int i = 0; i < _total; i++)
+            int n = Mathf.Max(0, pickupCount);
+            for (int i = 0; i < n; i++)
             {
-                var go = new GameObject("Pickup");
+                var node = ResourceNodes[i % ResourceNodes.Length];
+                var go = new GameObject("Res_" + node.res);
                 go.transform.position = RandomOnLand();
-                go.transform.localScale = new Vector3(0.5f, 0.5f, 1f);
+                go.transform.localScale = new Vector3(0.55f, 0.55f, 1f);
                 var sr = go.AddComponent<SpriteRenderer>();
-                sr.sprite = MakeSprite(new Color(1f, 0.82f, 0.3f), 24, false);
+                sr.sprite = MakeSprite(PlaceholderSprites.ResourceColor(node.res), 24, false);
                 sr.sortingOrder = 5;
                 var col = go.AddComponent<CircleCollider2D>();
                 col.isTrigger = true; col.radius = 0.7f;
                 var pickup = go.AddComponent<Pickup>();
+                pickup.resource = node.res; pickup.amount = node.amount;
                 pickup.Collected = OnCollected;
             }
         }
@@ -231,8 +255,7 @@ namespace Sunset.Game
 
         private void OnCollected(Pickup p)
         {
-            _collected++;
-            UpdateHud();
+            if (p != null) _inv.Add(p.resource, p.amount);
             _neko.Trigger("discovery");
         }
 
@@ -248,37 +271,28 @@ namespace Sunset.Game
             scaler.referenceResolution = new Vector2(1920, 1080);
             var root = canvasGo.GetComponent<RectTransform>();
 
-            var countGo = new GameObject("Count", typeof(RectTransform));
-            countGo.transform.SetParent(root, false);
-            var crt = countGo.GetComponent<RectTransform>();
-            crt.anchorMin = new Vector2(0, 1); crt.anchorMax = new Vector2(0, 1);
-            crt.pivot = new Vector2(0, 1); crt.anchoredPosition = new Vector2(30, -24);
-            crt.sizeDelta = new Vector2(600, 50);
-            _hud = countGo.AddComponent<TextMeshProUGUI>();
-            _hud.fontSize = 30; _hud.color = new Color(0.95f, 0.91f, 0.81f);
-            _hud.alignment = TextAlignmentOptions.TopLeft;
-            if (TMP_Settings.defaultFontAsset != null) _hud.font = TMP_Settings.defaultFontAsset;
-            UpdateHud();
-
             var hintGo = new GameObject("Hint", typeof(RectTransform));
             hintGo.transform.SetParent(root, false);
             var hrt = hintGo.GetComponent<RectTransform>();
             hrt.anchorMin = new Vector2(0.5f, 0); hrt.anchorMax = new Vector2(0.5f, 0);
             hrt.pivot = new Vector2(0.5f, 0); hrt.anchoredPosition = new Vector2(0, 24);
-            hrt.sizeDelta = new Vector2(1200, 30);
+            hrt.sizeDelta = new Vector2(1500, 30);
             var hint = hintGo.AddComponent<TextMeshProUGUI>();
-            hint.text = "WASD — движение · собирай золотое · 1–6 события · H поддержка · G добро / B зло (тон «Некого») · Esc — меню";
+            hint.text = "WASD — движение · собирай ресурсы · C — строить · ЛКМ поставить · E внести · R выдать ресурсы · 1–6/H/G/B — «Некий» · Esc — меню";
             hint.fontSize = 18; hint.color = new Color(0.95f, 0.91f, 0.81f, 0.45f);
             hint.alignment = TextAlignmentOptions.Center;
             if (TMP_Settings.defaultFontAsset != null) hint.font = TMP_Settings.defaultFontAsset;
         }
 
-        private void UpdateHud()
-        {
-            if (_hud != null) _hud.text = $"Собрано: {_collected} / {_total}";
-        }
-
         // ---------- утилиты ----------
+
+        // мир → нормализованные координаты острова (обратное к NormToWorld)
+        private bool IsOnLand(Vector2 world)
+        {
+            float u = world.x / (_spriteW * islandScale) + 0.5f;
+            float v = 0.5f - world.y / (_spriteH * islandScale);
+            return IslandStartShape.Contains(u, v);
+        }
 
         // случайная точка НА СУШЕ острова (через силуэт IslandStartShape)
         private Vector3 RandomOnLand()
