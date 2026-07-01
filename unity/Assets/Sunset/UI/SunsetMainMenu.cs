@@ -365,13 +365,12 @@ namespace Sunset.UI
             else bgImg.color = ColBg;
             bgImg.raycastTarget = false;
 
-            // затемнение слева — плавный градиент (а не жёсткая панель), чтобы
-            // текст читался, но переход в арт был мягким, как в веб-версии
+            // затемнение слева — градиент с теми же стопами, что в веб-CSS
+            // (#menu-stage::before): 0.86 → 0.66 (18%) → 0.32 (34%) → 0.08 (48%) → 0 (62%)
             var shade = NewUi("LeftShade", _root);
-            Anchored(shade, new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
-                new Vector2(0, 0), new Vector2(1000, 0));
+            Stretch(shade, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var shadeImg = shade.AddComponent<Image>();
-            shadeImg.sprite = MakeHorizontalFade(new Color(0f, 0f, 0f, 0.8f));
+            shadeImg.sprite = MakeHorizontalFade(new Color(8f / 255f, 6f / 255f, 4f / 255f));
             shadeImg.color = Color.white;
             shadeImg.raycastTarget = false;
 
@@ -380,8 +379,9 @@ namespace Sunset.UI
             if (logoSprite != null)
             {
                 var logo = NewUi("Logo", _root);
+                // как в веб-CSS (.menu-logo): left 32, top 28, width 312 (у logo.png 326×132)
                 Anchored(logo, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
-                    new Vector2(70, -60), new Vector2(560, 200));
+                    new Vector2(32, -28), new Vector2(312, 126));
                 var logoImg = logo.AddComponent<Image>();
                 logoImg.sprite = logoSprite;
                 logoImg.preserveAspect = true;
@@ -398,12 +398,13 @@ namespace Sunset.UI
                 ApplyFont(t);
             }
 
-            // колонка кнопок (слева)
+            // колонка кнопок — как в веб-CSS (.menu-buttons): left 4% (77px),
+            // центр колонки на 52% высоты, зазор 18px
             var col = NewUi("Buttons", _root);
             Anchored(col, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f),
-                new Vector2(70, -30), new Vector2(520, 560));
+                new Vector2(77, -22), new Vector2(440, 460));
             var vlg = col.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 12;
+            vlg.spacing = 18;
             vlg.childControlWidth = true; vlg.childControlHeight = false;
             vlg.childForceExpandWidth = true; vlg.childForceExpandHeight = false;
 
@@ -416,36 +417,43 @@ namespace Sunset.UI
             AddMenuButton(col.transform, "Выход", OpenExit);
             RefreshContinue();
 
-            // кнопка модов (внизу слева)
+            // кнопка модов (внизу слева) — скруглённая плашка с рамкой, как .mods-btn
             var mods = NewUi("Mods", _root);
             Anchored(mods, new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
-                new Vector2(70, 70), new Vector2(200, 56));
+                new Vector2(77, 38), new Vector2(132, 44));
             var modsImg = mods.AddComponent<Image>();
-            modsImg.color = ColBtnBg;
+            modsImg.sprite = MakeRoundedRect(
+                new Color(10f / 255f, 8f / 255f, 6f / 255f, 0.5f),   // фон rgba(10,8,6,.5)
+                new Color(0.953f, 0.906f, 0.812f, 0.3f));            // рамка gold 30%
+            modsImg.type = Image.Type.Sliced;
+            modsImg.color = Color.white;
             var modsBtn = mods.AddComponent<Button>();
             modsBtn.onClick.AddListener(OpenMods);
             var modsLbl = NewUi("Lbl", mods.transform);
             Stretch(modsLbl, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var modsT = modsLbl.AddComponent<TextMeshProUGUI>();
-            modsT.text = "Моды"; modsT.fontSize = 26; modsT.color = ColEmber;
+            modsT.text = "Моды"; modsT.fontSize = 19; modsT.color = ColGold;
+            modsT.characterSpacing = 4f;
             modsT.alignment = TextAlignmentOptions.Center; ApplyFont(modsT);
 
             // build-tag
             var tag = NewUi("BuildTag", _root);
             Anchored(tag, new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
-                new Vector2(-40, 28), new Vector2(460, 30));
+                new Vector2(-27, 16), new Vector2(460, 26));
             var tagT = tag.AddComponent<TextMeshProUGUI>();
-            tagT.text = "PROTOTYPE BUILD · UNITY"; tagT.fontSize = 18; tagT.characterSpacing = 6f;
-            tagT.color = new Color(0.95f, 0.91f, 0.81f, 0.4f);
+            tagT.text = "PROTOTYPE BUILD · UNITY"; tagT.fontSize = 14; tagT.characterSpacing = 10f;
+            tagT.color = new Color(0.953f, 0.906f, 0.812f, 0.5f);
             tagT.alignment = TextAlignmentOptions.Right; ApplyFont(tagT);
 
-            // реплика «Некого» (присутствие)
+            // реплика «Некого» — снизу по центру, красным курсивом (как .menu-neko:
+            // left 50%, bottom 6%, max-width 62%, цвет #ff5b5b)
             var neko = NewUi("MenuNeko", _root);
-            Anchored(neko, new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
-                new Vector2(-60, 60), new Vector2(720, 120));
+            Anchored(neko, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
+                new Vector2(0, 62), new Vector2(1190, 110));
             _nekoLabel = neko.AddComponent<TextMeshProUGUI>();
-            _nekoLabel.fontSize = 26; _nekoLabel.color = ColNeko; _nekoLabel.fontStyle = FontStyles.Italic;
-            _nekoLabel.alignment = TextAlignmentOptions.BottomRight; _nekoLabel.enableWordWrapping = true;
+            _nekoLabel.fontSize = 23; _nekoLabel.fontStyle = FontStyles.Italic;
+            _nekoLabel.color = new Color(1f, 0.357f, 0.357f, 0.95f); // #ff5b5b
+            _nekoLabel.alignment = TextAlignmentOptions.Bottom; _nekoLabel.enableWordWrapping = true;
             ApplyFont(_nekoLabel);
             neko.SetActive(false);
 
@@ -503,28 +511,32 @@ namespace Sunset.UI
         {
             var go = NewUi("Btn_" + label, parent);
             var le = go.AddComponent<LayoutElement>();
-            le.preferredHeight = 58;
-            // подложка прозрачна по умолчанию, подсвечивается лишь при наведении —
-            // как в веб-версии (просто жирный текст на фоне арта)
+            le.preferredHeight = 42;
+            // невидимая подложка — только приёмник кликов (как <button> без фона в вебе)
             var img = go.AddComponent<Image>();
-            img.color = Color.white;
+            img.color = new Color(0f, 0f, 0f, 0f);
             var btn = go.AddComponent<Button>();
-            btn.targetGraphic = img;
             btn.onClick.AddListener(onClick);
-            var colors = btn.colors;
-            colors.normalColor = new Color(1f, 1f, 1f, 0f);
-            colors.highlightedColor = new Color(1f, 0.54f, 0.17f, 0.16f);
-            colors.pressedColor = new Color(1f, 0.54f, 0.17f, 0.26f);
-            colors.selectedColor = new Color(1f, 1f, 1f, 0f);
-            colors.disabledColor = new Color(1f, 1f, 1f, 0f);
-            colors.fadeDuration = 0.1f;
-            btn.colors = colors;
 
             var lblGo = NewUi("Lbl", go.transform);
-            Stretch(lblGo, Vector2.zero, Vector2.one, new Vector2(8, 0), Vector2.zero);
+            Stretch(lblGo, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var t = lblGo.AddComponent<TextMeshProUGUI>();
-            t.text = label; t.fontSize = 36; t.color = ColGold; t.fontStyle = FontStyles.Bold;
-            t.alignment = TextAlignmentOptions.Left; ApplyFont(t);
+            t.text = label; t.fontSize = 34; t.fontStyle = FontStyles.Bold;
+            t.characterSpacing = 3f; t.raycastTarget = false;
+            t.color = Color.white; // фактический цвет задаёт тинт кнопки ниже
+            t.alignment = TextAlignmentOptions.MidlineLeft; ApplyFont(t);
+
+            // тинтуем сам текст (как в веб-CSS .menu-btn): золото → ярче на hover,
+            // серый #6a6258 у выключенной кнопки
+            btn.targetGraphic = t;
+            var colors = btn.colors;
+            colors.normalColor = ColGold;
+            colors.highlightedColor = new Color(1f, 0.914f, 0.69f, 1f);   // #ffe9b0
+            colors.pressedColor = new Color(1f, 0.54f, 0.17f, 1f);        // ember
+            colors.selectedColor = ColGold;
+            colors.disabledColor = new Color(0.415f, 0.384f, 0.345f, 1f); // #6a6258
+            colors.fadeDuration = 0.15f;
+            btn.colors = colors;
             return btn;
         }
 
@@ -755,24 +767,91 @@ namespace Sunset.UI
 
         // ---------- мини-утилиты uGUI ----------
 
+        private static TMP_FontAsset _serif;
+        private static bool _serifTried;
+
         private static void ApplyFont(TMP_Text t)
         {
-            if (TMP_Settings.defaultFontAsset != null) t.font = TMP_Settings.defaultFontAsset;
+            var serif = SerifFont();
+            if (serif != null) t.font = serif;
+            else if (TMP_Settings.defaultFontAsset != null) t.font = TMP_Settings.defaultFontAsset;
         }
 
-        // Горизонтальный градиент: насыщенный слева → прозрачный справа. Нужен для
-        // мягкого затемнения под текстом меню (без жёсткой панели).
-        private static Sprite MakeHorizontalFade(Color left, int w = 256)
+        // Засечковый шрифт из ОС — тот же фолбэк-ряд, что в веб-CSS (--serif:
+        // Cinzel, Trajan Pro, Times New Roman, DejaVu Serif, Georgia, serif).
+        // TMP-ассет создаётся в рантайме с динамическим атласом (кириллица
+        // подгружается по мере надобности). Если ничего не нашлось — стандартный.
+        private static TMP_FontAsset SerifFont()
+        {
+            if (_serifTried) return _serif;
+            _serifTried = true;
+            try
+            {
+                string[] wanted = { "Times New Roman", "Georgia", "DejaVu Serif",
+                    "Liberation Serif", "Noto Serif", "PT Serif" };
+                var installed = new HashSet<string>(Font.GetOSInstalledFontNames());
+                foreach (var name in wanted)
+                {
+                    if (!installed.Contains(name)) continue;
+                    var os = Font.CreateDynamicFontFromOSFont(name, 34);
+                    if (os == null) continue;
+                    var fa = TMP_FontAsset.CreateFontAsset(os);
+                    if (fa == null) continue;
+                    _serif = fa;
+                    break;
+                }
+            }
+            catch { _serif = null; }
+            return _serif;
+        }
+
+        // Горизонтальный градиент затемнения — стопы из веб-CSS (#menu-stage::before).
+        private static readonly float[] FadeStops = { 0f, 0.18f, 0.34f, 0.48f, 0.62f, 1f };
+        private static readonly float[] FadeAlpha = { 0.86f, 0.66f, 0.32f, 0.08f, 0f, 0f };
+
+        private static Sprite MakeHorizontalFade(Color tint, int w = 512)
         {
             var tex = new Texture2D(w, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
             for (int x = 0; x < w; x++)
             {
-                float a = 1f - x / (float)(w - 1); // 1 слева → 0 справа
-                a *= a;                            // мягче спад
-                tex.SetPixel(x, 0, new Color(left.r, left.g, left.b, left.a * a));
+                float u = x / (float)(w - 1);
+                float a = FadeAlpha[FadeAlpha.Length - 1];
+                for (int i = 1; i < FadeStops.Length; i++)
+                {
+                    if (u > FadeStops[i]) continue;
+                    float t = Mathf.InverseLerp(FadeStops[i - 1], FadeStops[i], u);
+                    a = Mathf.Lerp(FadeAlpha[i - 1], FadeAlpha[i], t);
+                    break;
+                }
+                tex.SetPixel(x, 0, new Color(tint.r, tint.g, tint.b, a));
             }
             tex.Apply();
             return Sprite.Create(tex, new Rect(0, 0, w, 1), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        // Скруглённая плашка с рамкой (9-slice) — аналог border-radius из веб-CSS.
+        private static Sprite MakeRoundedRect(Color fill, Color border, int radius = 6, int bw = 1)
+        {
+            int s = radius * 2 + bw * 2 + 6; // центр — растяжимая зона 9-slice
+            var tex = new Texture2D(s, s, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            float half = s * 0.5f, inner = half - radius - bw;
+            for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++)
+            {
+                // расстояние до «ядра» прямоугольника (SDF скруглённого прямоугольника)
+                float dx = Mathf.Max(0f, Mathf.Abs(x + 0.5f - half) - inner);
+                float dy = Mathf.Max(0f, Mathf.Abs(y + 0.5f - half) - inner);
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                Color c;
+                if (d <= radius) c = fill;
+                else if (d <= radius + bw) c = border;
+                else c = new Color(border.r, border.g, border.b, 0f);
+                tex.SetPixel(x, y, c);
+            }
+            tex.Apply();
+            int b = radius + bw + 2;
+            return Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f,
+                0, SpriteMeshType.FullRect, new Vector4(b, b, b, b));
         }
 
         private static GameObject NewUi(string name, Transform parent)
