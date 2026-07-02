@@ -44,6 +44,11 @@ namespace Sunset.UI
         private Button _continueBtn;
         private TextMeshProUGUI _nekoLabel;
         private Coroutine _nekoHide, _dwell;
+        private CanvasGroup _nekoGroup;
+        private Vector2 _nekoBasePos;
+        private RectTransform _modalCard;
+        private CanvasGroup _modalCardGroup;
+        private Coroutine _modalPop;
 
         // модалка
         private GameObject _modalRoot;
@@ -96,15 +101,34 @@ namespace Sunset.UI
         {
             if (_nekoLabel == null) return;
             _nekoLabel.text = text;
-            _nekoLabel.gameObject.SetActive(true);
             if (_nekoHide != null) StopCoroutine(_nekoHide);
-            _nekoHide = StartCoroutine(HideNekoAfter(seconds));
+            _nekoHide = StartCoroutine(NekoFade(seconds));
         }
 
-        private IEnumerator HideNekoAfter(float s)
+        // Появление/уход реплики — как .menu-neko в вебе: opacity 0→0.95 c
+        // подъёмом на 8px за 0.55 с, затем плавное затухание после паузы.
+        private IEnumerator NekoFade(float hold)
         {
-            yield return new WaitForSeconds(s);
-            if (_nekoLabel != null) _nekoLabel.gameObject.SetActive(false);
+            const float dur = 0.55f;
+            var rt = _nekoLabel.rectTransform;
+            for (float t = 0f; t < dur; t += Time.deltaTime)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, t / dur);
+                _nekoGroup.alpha = 0.95f * k;
+                rt.anchoredPosition = _nekoBasePos + new Vector2(0f, -8f * (1f - k));
+                yield return null;
+            }
+            _nekoGroup.alpha = 0.95f;
+            rt.anchoredPosition = _nekoBasePos;
+
+            yield return new WaitForSeconds(hold);
+
+            for (float t = 0f; t < dur; t += Time.deltaTime)
+            {
+                _nekoGroup.alpha = 0.95f * (1f - Mathf.SmoothStep(0f, 1f, t / dur));
+                yield return null;
+            }
+            _nekoGroup.alpha = 0f;
         }
 
         // ---------- действия кнопок ----------
@@ -326,9 +350,35 @@ namespace Sunset.UI
             rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
             rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
             _modalRoot.SetActive(true);
+
+            // «pop» карточки — как @keyframes pop в вебе:
+            // translateY(10px) scale(.98) + прозрачность → норма за 0.18 с
+            if (_modalPop != null) StopCoroutine(_modalPop);
+            _modalPop = StartCoroutine(PopModal());
         }
 
-        private void CloseModal() => _modalRoot.SetActive(false);
+        private IEnumerator PopModal()
+        {
+            const float dur = 0.18f;
+            for (float t = 0f; t < dur; t += Time.unscaledDeltaTime)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, t / dur);
+                _modalCardGroup.alpha = k;
+                _modalCard.localScale = Vector3.one * Mathf.Lerp(0.98f, 1f, k);
+                _modalCard.anchoredPosition = new Vector2(0f, Mathf.Lerp(-10f, 0f, k));
+                yield return null;
+            }
+            _modalCardGroup.alpha = 1f;
+            _modalCard.localScale = Vector3.one;
+            _modalCard.anchoredPosition = Vector2.zero;
+            _modalPop = null;
+        }
+
+        private void CloseModal()
+        {
+            if (_modalPop != null) { StopCoroutine(_modalPop); _modalPop = null; }
+            _modalRoot.SetActive(false);
+        }
 
         private void RefreshContinue()
         {
@@ -455,7 +505,10 @@ namespace Sunset.UI
             _nekoLabel.color = new Color(1f, 0.357f, 0.357f, 0.95f); // #ff5b5b
             _nekoLabel.alignment = TextAlignmentOptions.Bottom; _nekoLabel.enableWordWrapping = true;
             ApplyFont(_nekoLabel);
-            neko.SetActive(false);
+            _nekoGroup = neko.AddComponent<CanvasGroup>();
+            _nekoGroup.alpha = 0f;
+            _nekoGroup.interactable = false; _nekoGroup.blocksRaycasts = false;
+            _nekoBasePos = neko.GetComponent<RectTransform>().anchoredPosition;
 
             BuildModal();
         }
@@ -478,6 +531,8 @@ namespace Sunset.UI
             cardImg.color = ColCard;
             // клик по карточке не закрывает модалку
             card.AddComponent<Button>().transition = Selectable.Transition.None;
+            _modalCard = card.GetComponent<RectTransform>();
+            _modalCardGroup = card.AddComponent<CanvasGroup>();
 
             var titleGo = NewUi("Title", card.transform);
             Anchored(titleGo, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
@@ -537,6 +592,27 @@ namespace Sunset.UI
             colors.disabledColor = new Color(0.415f, 0.384f, 0.345f, 1f); // #6a6258
             colors.fadeDuration = 0.15f;
             btn.colors = colors;
+
+            // ромб-маркер слева (в вебе .menu-btn::before: rotate(45°), ember,
+            // свечение; появляется при наведении — анимирует MenuButtonFx)
+            var dia = NewUi("Diamond", go.transform);
+            Anchored(dia, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(14, 0), new Vector2(15, 15));
+            dia.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            dia.transform.localScale = Vector3.zero;
+            var glow = NewUi("Glow", dia.transform);
+            Stretch(glow, Vector2.zero, Vector2.one, new Vector2(-6, -6), new Vector2(6, 6));
+            var glowImg = glow.AddComponent<Image>();
+            glowImg.color = new Color(1f, 0.54f, 0.17f, 0.28f);
+            glowImg.raycastTarget = false;
+            var diaImg = dia.AddComponent<Image>();
+            diaImg.color = ColEmber;
+            diaImg.raycastTarget = false;
+
+            var fx = go.AddComponent<MenuButtonFx>();
+            fx.label = lblGo.GetComponent<RectTransform>();
+            fx.diamond = dia.GetComponent<RectTransform>();
+            fx.button = btn;
             return btn;
         }
 
